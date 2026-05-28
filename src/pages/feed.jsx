@@ -4,24 +4,26 @@ import React, {
 } from "react";
 
 import {
-  Heart,
   MessageCircle,
-  Send,
-  Share2,
   Wifi,
   WifiOff,
   RefreshCcw,
+  ThumbsUp,
+  Heart,
+  Share2,
 } from "lucide-react";
 
 import { supabase } from "../configs/supbase";
 
-import InstallPrompt from "../components/InstallPrompt";
-
 import { Preferences } from "@capacitor/preferences";
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
+import { Share } from "@capacitor/share";
 
-export default function Feed() {
+export default function Feed({
+  onOpenComments,
+}) {
+
   const [posts, setPosts] =
     useState([]);
 
@@ -34,16 +36,24 @@ export default function Feed() {
   const [refreshing, setRefreshing] =
     useState(false);
 
-  // ================= MOBILE TOAST =================
+  const [likedPosts, setLikedPosts] =
+    useState({});
+
+  const [animatingLike, setAnimatingLike] =
+    useState(null);
+
+  // ================= TOAST =================
 
   const showToast = async (
     message
   ) => {
+
     await Toast.show({
       text: message,
       duration: "short",
       position: "bottom",
     });
+
   };
 
   // ================= CACHE POSTS =================
@@ -51,15 +61,42 @@ export default function Feed() {
   const cachePosts = async (
     postsData
   ) => {
+
     try {
+
       await Preferences.set({
         key: "feed_cache",
         value: JSON.stringify(
           postsData
         ),
       });
+
     } catch (err) {
+
       console.log(err);
+
+    }
+  };
+
+  // ================= CACHE LIKES =================
+
+  const cacheLikes = async (
+    likesData
+  ) => {
+
+    try {
+
+      await Preferences.set({
+        key: "liked_posts",
+        value: JSON.stringify(
+          likesData
+        ),
+      });
+
+    } catch (err) {
+
+      console.log(err);
+
     }
   };
 
@@ -67,19 +104,55 @@ export default function Feed() {
 
   const loadCachedPosts =
     async () => {
+
       try {
+
         const { value } =
           await Preferences.get({
             key: "feed_cache",
           });
 
         if (value) {
-          setPosts(
-            JSON.parse(value)
+
+          const parsed =
+            JSON.parse(value);
+
+          setPosts(parsed || []);
+        }
+
+      } catch (err) {
+
+        console.log(err);
+
+      }
+    };
+
+  // ================= LOAD LIKES =================
+
+  const loadLikedPosts =
+    async () => {
+
+      try {
+
+        const { value } =
+          await Preferences.get({
+            key: "liked_posts",
+          });
+
+        if (value) {
+
+          const parsed =
+            JSON.parse(value);
+
+          setLikedPosts(
+            parsed || {}
           );
         }
+
       } catch (err) {
+
         console.log(err);
+
       }
     };
 
@@ -88,7 +161,9 @@ export default function Feed() {
   const fetchPosts = async (
     showLoader = false
   ) => {
+
     try {
+
       if (showLoader) {
         setLoading(true);
       }
@@ -103,68 +178,121 @@ export default function Feed() {
             ascending: false,
           });
 
-      if (!error && data) {
-        setPosts(data);
+      if (error) {
 
-        // SAVE TO CACHE
-        await cachePosts(data);
+        console.log(error);
+
+        return;
       }
+
+      if (data) {
+
+        const formatted =
+          data.map((post) => ({
+            ...post,
+            likes_count:
+              post.likes_count || 0,
+          }));
+
+        setPosts(formatted);
+
+        await cachePosts(
+          formatted
+        );
+      }
+
     } catch (err) {
+
       console.log(err);
+
     }
 
     setRefreshing(false);
     setLoading(false);
   };
 
-  // ================= START FEED =================
+  // ================= START =================
 
   useEffect(() => {
-    const startFeed = async () => {
 
-      // LOAD CACHE FIRST
-      await loadCachedPosts();
+    const startFeed =
+      async () => {
 
-      // THEN FETCH NEW POSTS
-      await fetchPosts(true);
-    };
+        await loadCachedPosts();
+
+        await loadLikedPosts();
+
+        await fetchPosts(true);
+      };
 
     startFeed();
+
   }, []);
 
   // ================= REALTIME =================
 
   useEffect(() => {
+
     const channel = supabase
+
       .channel("feed-realtime")
 
       .on(
         "postgres_changes",
+
         {
           event: "*",
           schema: "public",
           table: "posts",
         },
 
-        () => {
-          fetchPosts();
+        (payload) => {
+
+          const updatedPost =
+            payload.new;
+
+          if (!updatedPost) return;
+
+          setPosts((prev) => {
+
+            const updated =
+              prev.map((post) =>
+                post.id ===
+                updatedPost.id
+                  ? {
+                    ...post,
+                    ...updatedPost,
+                  }
+                  : post
+              );
+
+            cachePosts(updated);
+
+            return updated;
+          });
         }
       )
 
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+
+      supabase.removeChannel(
+        channel
+      );
     };
+
   }, []);
 
   // ================= NETWORK =================
 
   useEffect(() => {
+
     let firstRun = true;
 
     const setupNetwork =
       async () => {
+
         const status =
           await Network.getStatus();
 
@@ -176,24 +304,30 @@ export default function Feed() {
           "networkStatusChange",
 
           async (status) => {
+
             setIsOnline(
               status.connected
             );
 
             if (firstRun) {
+
               firstRun = false;
+
               return;
             }
 
             if (
               status.connected
             ) {
+
               await showToast(
                 "You're back online"
               );
 
               fetchPosts();
+
             } else {
+
               await showToast(
                 "You're offline"
               );
@@ -203,6 +337,7 @@ export default function Feed() {
       };
 
     setupNetwork();
+
   }, []);
 
   // ================= LIKE =================
@@ -210,64 +345,196 @@ export default function Feed() {
   const likePost = async (
     postId
   ) => {
+
     try {
-      const { data } =
-        await supabase.auth.getUser();
 
-      const user = data.user;
+      const alreadyLiked =
+        likedPosts[postId];
 
-      if (!user) {
-        showToast(
-          "Please login first"
+      setAnimatingLike(
+        postId
+      );
+
+      setTimeout(() => {
+
+        setAnimatingLike(
+          null
         );
+
+      }, 400);
+
+      // ================= UNLIKE =================
+
+      if (alreadyLiked) {
+
+        const updatedPosts =
+          posts.map((post) => {
+
+            if (
+              post.id === postId
+            ) {
+
+              return {
+                ...post,
+                likes_count:
+                  Math.max(
+                    0,
+                    (
+                      post.likes_count ||
+                      0
+                    ) - 1
+                  ),
+              };
+            }
+
+            return post;
+          });
+
+        setPosts(updatedPosts);
+
+        await cachePosts(
+          updatedPosts
+        );
+
+        const updatedLikes = {
+          ...likedPosts,
+          [postId]: false,
+        };
+
+        setLikedPosts(
+          updatedLikes
+        );
+
+        await cacheLikes(
+          updatedLikes
+        );
+
+        const targetPost =
+          updatedPosts.find(
+            (p) =>
+              p.id === postId
+          );
+
+        await supabase
+          .from("posts")
+          .update({
+            likes_count:
+              targetPost.likes_count,
+          })
+          .eq("id", postId);
 
         return;
       }
 
-      await supabase
-        .from("likes")
-        .insert({
-          post_id: postId,
-          user_id: user.id,
+      // ================= LIKE =================
+
+      const updatedPosts =
+        posts.map((post) => {
+
+          if (
+            post.id === postId
+          ) {
+
+            return {
+              ...post,
+              likes_count:
+                (
+                  post.likes_count ||
+                  0
+                ) + 1,
+            };
+          }
+
+          return post;
         });
 
-      showToast("Post liked");
+      setPosts(updatedPosts);
 
-      fetchPosts();
+      await cachePosts(
+        updatedPosts
+      );
+
+      const updatedLikes = {
+        ...likedPosts,
+        [postId]: true,
+      };
+
+      setLikedPosts(
+        updatedLikes
+      );
+
+      await cacheLikes(
+        updatedLikes
+      );
+
+      const targetPost =
+        updatedPosts.find(
+          (p) =>
+            p.id === postId
+        );
+
+      await supabase
+        .from("posts")
+        .update({
+          likes_count:
+            targetPost.likes_count,
+        })
+        .eq("id", postId);
+
     } catch (err) {
+
       console.log(err);
+
     }
   };
 
   // ================= SHARE =================
 
   const sharePost = async (
-    text
+    post
   ) => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "SocialGist",
-          text,
-        });
-      } else {
-        await navigator.clipboard.writeText(
-          text
-        );
 
-        showToast(
-          "Copied to clipboard"
-        );
-      }
+    try {
+
+      const shareUrl =
+        `https://socialgist-app.vercel.apppost/${post.id}`;
+
+      const shareText = `🔥 SocialGist
+
+${post.description || ""}
+
+❤️ ${post.likes_count || 0} likes
+
+👤 @${(
+          post.profile_name ||
+          "user"
+        )
+          .replace(/\s+/g, "")
+          .toLowerCase()}
+
+🌍 ${shareUrl}`;
+
+      await Share.share({
+        title: "SocialGist",
+        text: shareText,
+        url: post.image || shareUrl,
+        dialogTitle:
+          "Share Post",
+      });
+
     } catch (err) {
+
       console.log(err);
+
     }
   };
 
   // ================= LOADING =================
 
   if (loading) {
+
     return (
+
       <div className="h-screen bg-white dark:bg-[#0f0f10] flex flex-col items-center justify-center">
 
         <img
@@ -284,23 +551,18 @@ export default function Feed() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0f0f10] pb-20">
 
-      <InstallPrompt />
+    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0f0f10] pb-24">
 
-      {/* TOP STATUS BAR */}
+      {/* TOP */}
 
       <div className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 dark:bg-[#111]/80 border-b border-gray-200 dark:border-white/10">
 
         <div className="h-14 px-4 flex items-center justify-between">
 
-          <div>
-
-            <h1 className="text-xl font-black bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
-              SocialGist
-            </h1>
-
-          </div>
+          <h1 className="text-xl font-black bg-gradient-to-r from-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+            SocialGist
+          </h1>
 
           <div className="flex items-center gap-3">
 
@@ -315,11 +577,10 @@ export default function Feed() {
 
               <RefreshCcw
                 size={18}
-                className={`${
-                  refreshing
+                className={`${refreshing
                     ? "animate-spin"
                     : ""
-                }`}
+                  }`}
               />
 
             </button>
@@ -327,11 +588,10 @@ export default function Feed() {
             {/* NETWORK */}
 
             <div
-              className={`flex items-center gap-2 px-3 h-10 rounded-full text-xs font-bold ${
-                isOnline
+              className={`flex items-center gap-2 px-3 h-10 rounded-full text-xs font-bold ${isOnline
                   ? "bg-green-500/10 text-green-500"
                   : "bg-red-500/10 text-red-500"
-              }`}
+                }`}
             >
 
               {isOnline ? (
@@ -357,6 +617,7 @@ export default function Feed() {
       <div className="w-full max-w-2xl mx-auto">
 
         {posts.length === 0 && (
+
           <div className="h-[70vh] flex items-center justify-center">
 
             <div className="text-center px-6">
@@ -371,7 +632,7 @@ export default function Feed() {
               </h2>
 
               <p className="text-gray-500 mt-2">
-                Be the first to post on SocialGist
+                Be the first to post
               </p>
 
             </div>
@@ -385,18 +646,18 @@ export default function Feed() {
             post.content || {};
 
           return (
+
             <div
               key={post.id}
-              className="bg-white dark:bg-[#18191A] mb-3 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
+              className="bg-white dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
             >
 
               {/* HEADER */}
 
               <div className="flex items-center gap-3 px-4 py-4">
 
-                {/* AVATAR */}
-
                 {post.profile_image ? (
+
                   <img
                     src={
                       post.profile_image
@@ -404,18 +665,20 @@ export default function Feed() {
                     alt=""
                     className="w-12 h-12 rounded-full object-cover"
                   />
+
                 ) : (
+
                   <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm">
+
                     {(
                       post.profile_name ||
                       "U"
                     )
                       .charAt(0)
                       .toUpperCase()}
+
                   </div>
                 )}
-
-                {/* INFO */}
 
                 <div className="flex-1">
 
@@ -437,10 +700,13 @@ export default function Feed() {
               {/* DESCRIPTION */}
 
               {post.description && (
+
                 <div className="px-4 pb-4">
 
                   <p className="text-[15px] leading-relaxed text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
+
                     {post.description}
+
                   </p>
 
                 </div>
@@ -449,18 +715,18 @@ export default function Feed() {
               {/* IMAGE */}
 
               {post.image && (
+
                 <div className="relative overflow-hidden bg-black">
 
                   <img
-                    src={post.image}
+                    src={`${post.image}?t=${Date.now()}`}
                     alt=""
                     className="w-full max-h-[700px] object-cover"
                   />
 
-                  {/* EDITOR TEXT */}
-
                   {parsed?.layers?.map(
                     (layer) => (
+
                       <div
                         key={layer.id}
                         className="absolute font-black"
@@ -475,7 +741,9 @@ export default function Feed() {
                             "0 3px 15px rgba(0,0,0,0.6)",
                         }}
                       >
+
                         {layer.text}
+
                       </div>
                     )
                   )}
@@ -483,10 +751,11 @@ export default function Feed() {
                 </div>
               )}
 
-              {/* TEXT ONLY POST */}
+              {/* TEXT POST */}
 
               {!post.image &&
                 parsed?.background && (
+
                   <div
                     className="relative min-h-[280px] flex items-center justify-center overflow-hidden"
                     style={{
@@ -497,6 +766,7 @@ export default function Feed() {
 
                     {parsed?.layers?.map(
                       (layer) => (
+
                         <div
                           key={layer.id}
                           className="absolute font-black"
@@ -511,7 +781,9 @@ export default function Feed() {
                               "0 3px 15px rgba(0,0,0,0.6)",
                           }}
                         >
+
                           {layer.text}
+
                         </div>
                       )
                     )}
@@ -521,70 +793,116 @@ export default function Feed() {
 
               {/* ACTIONS */}
 
-              <div className="flex items-center justify-between px-4 py-4 border-t border-gray-100 dark:border-white/5">
+              <div className="px-4 py-3">
 
-                {/* LIKE */}
+                {/* COUNTS */}
 
-                <button
-                  onClick={() =>
-                    likePost(post.id)
-                  }
-                  className="flex items-center gap-2 text-gray-700 dark:text-gray-200 active:scale-95 transition"
-                >
+                <div className="flex items-center justify-between mb-3">
 
-                  <Heart size={22} />
+                  <div className="flex items-center gap-2">
 
-                  <span className="text-sm font-medium">
-                    Like
-                  </span>
+                    <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white">
 
-                </button>
+                      <Heart
+                        size={13}
+                        fill="white"
+                      />
 
-                {/* COMMENT */}
+                    </div>
 
-                <button className="flex items-center gap-2 text-gray-700 dark:text-gray-200 active:scale-95 transition">
+                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
 
-                  <MessageCircle
-                    size={22}
-                  />
+                      {post.likes_count || 0} likes
 
-                  <span className="text-sm font-medium">
-                    Comment
-                  </span>
+                    </span>
 
-                </button>
+                  </div>
 
-                {/* SEND */}
+                  <div className="text-xs text-gray-500">
+                    SocialGist
+                  </div>
 
-                <button className="flex items-center gap-2 text-gray-700 dark:text-gray-200 active:scale-95 transition">
+                </div>
 
-                  <Send size={22} />
+                {/* BUTTONS */}
 
-                  <span className="text-sm font-medium">
-                    Send
-                  </span>
+                <div className="grid grid-cols-3 gap-2 border-t border-gray-100 dark:border-white/5 pt-3">
 
-                </button>
+                  {/* LIKE */}
 
-                {/* SHARE */}
+                  <button
+                    onClick={() =>
+                      likePost(
+                        post.id
+                      )
+                    }
+                    className={`flex items-center justify-center gap-2 h-12 rounded-2xl transition-all active:scale-95 ${likedPosts[
+                        post.id
+                      ]
+                        ? "bg-blue-500/10 text-blue-500"
+                        : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200"
+                      }`}
+                  >
 
-                <button
-                  onClick={() =>
-                    sharePost(
-                      post.description ||
-                        "Check out this post on SocialGist"
-                    )
-                  }
-                  className="flex items-center gap-2 text-purple-600 active:scale-95 transition"
-                >
+                    <ThumbsUp
+                      size={20}
+                      className={`transition-all ${animatingLike ===
+                          post.id
+                          ? "scale-150 rotate-12"
+                          : ""
+                        }`}
+                      fill={
+                        likedPosts[
+                          post.id
+                        ]
+                          ? "currentColor"
+                          : "none"
+                      }
+                    />
 
-                  <Share2 size={22} />
+                    <span className="text-sm font-semibold">
+                      Like
+                    </span>
 
-                  <span className="text-sm font-medium">
-                    Share
-                  </span>
+                  </button>
 
-                </button>
+                  {/* COMMENT */}
+
+                  <button
+                    onClick={() =>
+                      onOpenComments(post)
+                    }
+                    className="flex items-center justify-center gap-2 h-12 rounded-2xl hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 active:scale-95 transition"
+                  >
+
+                    <MessageCircle size={20} />
+
+                    <span className="text-sm font-semibold">
+                      Comment
+                    </span>
+
+                  </button>
+
+                  {/* SHARE */}
+
+                  <button
+                    onClick={() =>
+                      sharePost(
+                        post
+                      )
+                    }
+                    className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-purple-500/10 text-purple-600 active:scale-95 transition"
+                  >
+
+                    <Share2 size={20} />
+
+                    <span className="text-sm font-semibold">
+                      Share
+                    </span>
+
+                  </button>
+
+                </div>
 
               </div>
 

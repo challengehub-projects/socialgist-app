@@ -1,29 +1,52 @@
-import React, { useEffect, useState } from "react";
+// ================= APP.JSX =================
+
+import React, {
+  useEffect,
+  useState,
+} from "react";
+
 import { supabase } from "./configs/supbase";
+
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
 
 import WelcomePage from "./pages/welcome";
 import LoginPage from "./pages/login";
 import SignupPage from "./pages/signup";
+
 import HomeFeedPage from "./pages/feed";
 import TopNavbar from "./pages/navbar";
 
+import Messages from "./pages/messeges";
+
 export default function App() {
 
-  const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [showSplash, setShowSplash] = useState(true);
+  const [session, setSession] =
+    useState(null);
 
-  // APP ROUTES
-  const [page, setPage] = useState("welcome");
+  const [loading, setLoading] =
+    useState(true);
+
+  const [showSplash, setShowSplash] =
+    useState(true);
+
+  // ================= ROUTING =================
+
+  const [page, setPage] =
+    useState("welcome");
+
+  // COMMENT CHAT DATA
+  const [selectedPost, setSelectedPost] =
+    useState(null);
 
   // ================= SPLASH =================
 
   useEffect(() => {
 
     const timer = setTimeout(() => {
+
       setShowSplash(false);
+
     }, 2500);
 
     return () => clearTimeout(timer);
@@ -49,7 +72,8 @@ export default function App() {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () =>
+      subscription.unsubscribe();
 
   }, []);
 
@@ -59,7 +83,8 @@ export default function App() {
 
     const {
       data: { session },
-    } = await supabase.auth.getSession();
+    } =
+      await supabase.auth.getSession();
 
     setSession(session);
 
@@ -70,7 +95,7 @@ export default function App() {
     setLoading(false);
   };
 
-
+  // ================= NETWORK =================
 
   useEffect(() => {
 
@@ -133,9 +158,19 @@ export default function App() {
 
   }, []);
 
-  // ================= SPLASH SCREEN =================
+  // ================= OPEN COMMENTS =================
+
+  const openComments = (post) => {
+
+    setSelectedPost(post);
+
+    setPage("messages");
+  };
+
+  // ================= SPLASH =================
 
   if (showSplash) {
+
     return (
       <div className="h-screen bg-white flex items-center justify-center">
 
@@ -160,9 +195,14 @@ export default function App() {
   // ================= LOADING =================
 
   if (loading) {
+
     return (
-      <div className="h-screen bg-black flex items-center justify-center">
-        <p className="text-white">Loading...</p>
+      <div className="h-screen bg-white flex items-center justify-center">
+
+        <p className="text-black">
+          Loading...
+        </p>
+
       </div>
     );
   }
@@ -170,20 +210,66 @@ export default function App() {
   // ================= ROUTING =================
 
   if (page === "welcome") {
-    return <WelcomePage onNavigate={setPage} />;
+
+    return (
+      <WelcomePage
+        onNavigate={setPage}
+      />
+    );
   }
 
   if (page === "login") {
-    return <LoginPage onNavigate={setPage} />;
+
+    return (
+      <LoginPage
+        onNavigate={setPage}
+      />
+    );
   }
 
   if (page === "signup") {
-    return <SignupPage onNavigate={setPage} />;
+
+    return (
+      <SignupPage
+        onNavigate={setPage}
+      />
+    );
   }
+
+  // ================= MESSAGES =================
+
+  if (page === "messages") {
+
+    return (
+      <Messages
+
+        post={selectedPost}
+
+        onBack={() =>
+          setPage("feed")
+        }
+
+      />
+    );
+  }
+
+  // ================= FEED =================
 
   return (
     <>
-      <TopNavbar />
+
+      <TopNavbar
+        onNavigate={setPage}
+      />
+
+      <HomeFeedPage
+
+        onOpenComments={
+          openComments
+        }
+
+      />
+
     </>
-  )
+  );
 }

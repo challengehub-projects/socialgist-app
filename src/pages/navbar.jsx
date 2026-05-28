@@ -26,6 +26,7 @@ import {
   Wifi,
   WifiOff,
   Loader2,
+  Send,
 } from "lucide-react";
 
 import { Rnd } from "react-rnd";
@@ -47,6 +48,9 @@ export default function TopNavbar({
   const [showCreateModal, setShowCreateModal] =
     useState(false);
 
+  const [showProfileModal, setShowProfileModal] =
+    useState(false);
+
   const [layers, setLayers] = useState([]);
 
   const [selected, setSelected] =
@@ -61,7 +65,11 @@ export default function TopNavbar({
   const [syncing, setSyncing] =
     useState(false);
 
-  const [image, setImage] = useState(null);
+  const [image, setImage] =
+    useState(null);
+
+  const [imageFile, setImageFile] =
+    useState(null);
 
   const [description, setDescription] =
     useState("");
@@ -69,7 +77,16 @@ export default function TopNavbar({
   const [isOnline, setIsOnline] =
     useState(true);
 
-  // ================= COLORS =================
+  const [profileData, setProfileData] =
+    useState({
+      name: "Anonymous",
+      username: "@user",
+      bio: "Welcome to SocialGist",
+      avatar:
+        "https://i.pravatar.cc/300?img=12",
+    });
+
+  /* ================= COLORS ================= */
 
   const colors = [
     "#ffffff",
@@ -83,25 +100,17 @@ export default function TopNavbar({
     "#00ffd0",
   ];
 
-  // ================= BACKGROUNDS =================
+  /* ================= BACKGROUNDS ================= */
 
   const backgrounds = [
     "linear-gradient(135deg,#667eea 0%,#764ba2 100%)",
-
     "linear-gradient(135deg,#f093fb 0%,#f5576c 100%)",
-
     "linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)",
-
     "linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)",
-
     "linear-gradient(135deg,#fa709a 0%,#fee140 100%)",
-
     "linear-gradient(135deg,#30cfd0 0%,#330867 100%)",
-
     "linear-gradient(135deg,#5ee7df 0%,#b490ca 100%)",
-
     "linear-gradient(135deg,#ff758c 0%,#ff7eb3 100%)",
-
     "linear-gradient(135deg,#141e30 0%,#243b55 100%)",
   ];
 
@@ -115,39 +124,76 @@ export default function TopNavbar({
       ]
     );
 
-  // ================= NETWORK =================
+  /* ================= USER PROFILE ================= */
 
   useEffect(() => {
-  checkNetwork();
+    getUserProfile();
+  }, []);
 
-  let listener;
+  const getUserProfile = async () => {
+    const { data } =
+      await supabase.auth.getUser();
 
-  const setupListener = async () => {
-    listener =
-      await Network.addListener(
-        "networkStatusChange",
-        (status) => {
-          setIsOnline(
-            status.connected
-          );
+    if (data?.user) {
+      setProfileData({
+        name:
+          data.user.user_metadata
+            ?.full_name ||
+          "Anonymous",
 
-          if (
-            status.connected
-          ) {
-            syncOfflinePosts();
-          }
-        }
-      );
-  };
+        username:
+          "@" +
+          (
+            data.user.email ||
+            "user"
+          ).split("@")[0],
 
-  setupListener();
+        bio:
+          data.user.user_metadata
+            ?.bio ||
+          "Frontend developer",
 
-  return () => {
-    if (listener) {
-      listener.remove();
+        avatar:
+          data.user.user_metadata
+            ?.avatar_url ||
+          "https://i.pravatar.cc/300?img=12",
+      });
     }
   };
-}, []);
+
+  /* ================= NETWORK ================= */
+
+  useEffect(() => {
+    checkNetwork();
+
+    let listener;
+
+    const setupListener = async () => {
+      listener =
+        await Network.addListener(
+          "networkStatusChange",
+          (status) => {
+            setIsOnline(
+              status.connected
+            );
+
+            if (
+              status.connected
+            ) {
+              syncOfflinePosts();
+            }
+          }
+        );
+    };
+
+    setupListener();
+
+    return () => {
+      if (listener) {
+        listener.remove();
+      }
+    };
+  }, []);
 
   const checkNetwork = async () => {
     const status =
@@ -156,7 +202,7 @@ export default function TopNavbar({
     setIsOnline(status.connected);
   };
 
-  // ================= SYNC OFFLINE POSTS =================
+  /* ================= SYNC OFFLINE ================= */
 
   const syncOfflinePosts = async () => {
     try {
@@ -189,7 +235,6 @@ export default function TopNavbar({
       if (onPostCreated) {
         onPostCreated();
       }
-
     } catch (err) {
       console.log(err);
     }
@@ -197,7 +242,7 @@ export default function TopNavbar({
     setSyncing(false);
   };
 
-  // ================= SAVE OFFLINE =================
+  /* ================= SAVE OFFLINE ================= */
 
   const saveOfflinePost = async (
     payload
@@ -219,7 +264,7 @@ export default function TopNavbar({
     });
   };
 
-  // ================= ICON BTN =================
+  /* ================= ICON BTN ================= */
 
   const iconBtn =
     "relative flex items-center justify-center h-11 w-11 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-[#3A3B3C] dark:hover:bg-[#4E4F50] text-gray-700 dark:text-gray-200 transition shrink-0 active:scale-95";
@@ -227,12 +272,15 @@ export default function TopNavbar({
   const badge =
     "absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-purple-600 rounded-full";
 
-  // ================= IMAGE UPLOAD =================
+  /* ================= IMAGE ================= */
 
   const uploadImage = async (e) => {
-    const file = e.target.files?.[0];
+    const file =
+      e.target.files?.[0];
 
     if (!file) return;
+
+    setImageFile(file);
 
     const preview =
       URL.createObjectURL(file);
@@ -240,7 +288,7 @@ export default function TopNavbar({
     setImage(preview);
   };
 
-  // ================= ADD TEXT =================
+  /* ================= ADD TEXT ================= */
 
   const addText = () => {
     const randomColor =
@@ -257,17 +305,11 @@ export default function TopNavbar({
       ...prev,
       {
         id,
-
         type: "text",
-
         text: "Tap to edit",
-
         x: 90,
-
         y: 220,
-
         color: randomColor,
-
         fontSize: 34,
       },
     ]);
@@ -275,7 +317,7 @@ export default function TopNavbar({
     setSelected(id);
   };
 
-  // ================= UPDATE LAYER =================
+  /* ================= UPDATE LAYER ================= */
 
   const updateLayer = (
     id,
@@ -293,7 +335,7 @@ export default function TopNavbar({
     );
   };
 
-  // ================= DELETE LAYER =================
+  /* ================= DELETE ================= */
 
   const deleteLayer = () => {
     if (!selected) return;
@@ -307,7 +349,7 @@ export default function TopNavbar({
     setSelected(null);
   };
 
-  // ================= RANDOM BG =================
+  /* ================= RANDOM BG ================= */
 
   const randomizeBackground = () => {
     const random =
@@ -321,19 +363,15 @@ export default function TopNavbar({
     setBackground(random);
   };
 
-  // ================= RESET =================
+  /* ================= RESET ================= */
 
   const resetEditor = () => {
     setLayers([]);
-
     setSelected(null);
-
     setImage(null);
-
+    setImageFile(null);
     setDescription("");
-
     setShowCreateModal(false);
-
     setLoading(false);
 
     setBackground(
@@ -346,7 +384,7 @@ export default function TopNavbar({
     );
   };
 
-  // ================= EMOJI =================
+  /* ================= EMOJI ================= */
 
   const selectedLayer = layers.find(
     (l) => l.id === selected
@@ -362,7 +400,7 @@ export default function TopNavbar({
     });
   };
 
-  // ================= CREATE POST =================
+  /* ================= CREATE POST ================= */
 
   const createPost = async () => {
     if (
@@ -393,48 +431,63 @@ export default function TopNavbar({
 
       let uploadedImage = null;
 
-      // ================= UPLOAD IMAGE =================
+      if (
+        imageFile &&
+        isOnline
+      ) {
+        const fileExt =
+          imageFile.name
+            .split(".")
+            .pop();
 
-      if (image && isOnline) {
-        const response = await fetch(
-          image
-        );
-
-        const blob =
-          await response.blob();
-
-        const fileName = `${Date.now()}-${Math.random()}.jpg`;
+        const fileName =
+          `${Date.now()}-${Math.random()
+            .toString(36)
+            .substring(2)}.${fileExt}`;
 
         const {
           error: uploadError,
         } = await supabase.storage
           .from("post-images")
-          .upload(fileName, blob, {
-            contentType:
-              "image/jpeg",
+          .upload(
+            fileName,
+            imageFile,
+            {
+              cacheControl: "3600",
+              upsert: false,
+            }
+          );
 
-            upsert: true,
-          });
+        if (uploadError) {
+          console.log(
+            uploadError
+          );
 
-        if (!uploadError) {
-          const { data } =
-            supabase.storage
-              .from(
-                "post-images"
-              )
-              .getPublicUrl(
-                fileName
-              );
+          alert(
+            uploadError.message
+          );
 
-          uploadedImage =
-            data.publicUrl;
+          setLoading(false);
+
+          return;
         }
+
+        const { data } =
+          supabase.storage
+            .from(
+              "post-images"
+            )
+            .getPublicUrl(
+              fileName
+            );
+
+        uploadedImage =
+          data.publicUrl;
       }
 
-      // ================= PAYLOAD =================
-
       const payload = {
-        user_id: userData.user.id,
+        user_id:
+          userData.user.id,
 
         profile_name:
           userData.user
@@ -454,7 +507,8 @@ export default function TopNavbar({
 
         description,
 
-        image: uploadedImage,
+        image:
+          uploadedImage,
 
         content: {
           background,
@@ -462,21 +516,19 @@ export default function TopNavbar({
         },
       };
 
-      // ================= OFFLINE =================
-
       if (!isOnline) {
-        await saveOfflinePost(payload);
+        await saveOfflinePost(
+          payload
+        );
 
         alert(
-          "No internet. Post saved offline and will sync automatically."
+          "Post saved offline"
         );
 
         resetEditor();
 
         return;
       }
-
-      // ================= INSERT =================
 
       const { error } =
         await supabase
@@ -498,7 +550,6 @@ export default function TopNavbar({
       }
 
       resetEditor();
-
     } catch (err) {
       console.log(err);
 
@@ -516,35 +567,34 @@ export default function TopNavbar({
 
       <header className="sticky top-0 z-50 bg-white/95 dark:bg-[#18191A]/95 backdrop-blur-xl border-b border-gray-200 dark:border-[#2d2f31]">
 
-        <div className="h-16 px-3 sm:px-4 flex items-center justify-between">
+        <div className="h-16 px-3 sm:px-4 flex items-center justify-between gap-2">
 
           {/* LEFT */}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
 
-            <div
+            <button
               onClick={() =>
-                onNavigate &&
-                onNavigate(
-                  "profile"
-                )
+                setShowProfileModal(true)
               }
-              className="relative cursor-pointer"
+              className="relative shrink-0 active:scale-95 transition"
             >
 
               <img
-                src="https://i.pravatar.cc/150?img=12"
+                src={
+                  profileData.avatar
+                }
                 alt=""
-                className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500"
+                className="h-12 w-12 min-h-[48px] min-w-[48px] rounded-full object-cover ring-2 ring-purple-500"
               />
 
               <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 border-2 border-white rounded-full" />
 
-            </div>
+            </button>
 
-            <div className="leading-tight">
+            <div className="leading-tight min-w-0">
 
-              <h1 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-purple-700 to-fuchsia-600 bg-clip-text text-transparent">
+              <h1 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-purple-700 to-fuchsia-600 bg-clip-text text-transparent truncate">
                 SocialGist
               </h1>
 
@@ -600,9 +650,7 @@ export default function TopNavbar({
 
           {/* RIGHT */}
 
-          <div className="flex items-center gap-2">
-
-            {/* ONLINE STATUS */}
+          <div className="flex items-center gap-2 shrink-0">
 
             <div
               className={`hidden sm:flex items-center gap-2 px-3 h-10 rounded-full text-xs font-bold ${
@@ -632,15 +680,13 @@ export default function TopNavbar({
               <Search size={18} />
             </button>
 
-            {/* CREATE */}
-
             <button
               onClick={() =>
                 setShowCreateModal(
                   true
                 )
               }
-              className="bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:opacity-90 text-white h-11 px-4 rounded-full flex items-center gap-2 font-semibold shadow-xl active:scale-95 transition"
+              className="bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white h-11 px-4 rounded-full flex items-center gap-2 font-semibold shadow-xl active:scale-95 transition shrink-0"
             >
 
               <Plus size={18} />
@@ -650,8 +696,6 @@ export default function TopNavbar({
               </span>
 
             </button>
-
-            {/* DARK */}
 
             <button
               onClick={
@@ -666,8 +710,6 @@ export default function TopNavbar({
               )}
             </button>
 
-            {/* MSG */}
-
             <button className={iconBtn}>
 
               <MessageCircle
@@ -679,8 +721,6 @@ export default function TopNavbar({
               </span>
 
             </button>
-
-            {/* NOTIF */}
 
             <button className={iconBtn}>
 
@@ -699,6 +739,95 @@ export default function TopNavbar({
         </div>
 
       </header>
+
+      {/* ================= PROFILE MODAL ================= */}
+
+      {showProfileModal && (
+        <div className="fixed inset-0 z-[999] bg-black/50 backdrop-blur-sm flex items-end">
+
+          <div className="w-full h-[60vh] bg-white dark:bg-[#18191A] rounded-t-[35px] animate-slideUp relative overflow-hidden">
+
+            <div className="flex justify-center pt-3 pb-2">
+
+              <div className="w-14 h-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />
+
+            </div>
+
+            <button
+              onClick={() =>
+                setShowProfileModal(
+                  false
+                )
+              }
+              className="absolute top-4 right-4 h-10 w-10 rounded-full bg-gray-100 dark:bg-[#2a2b2d] flex items-center justify-center"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="px-6 pt-4">
+
+              <div className="flex flex-col items-center text-center">
+
+                <img
+                  src={
+                    profileData.avatar
+                  }
+                  alt=""
+                  className="h-28 w-28 rounded-full object-cover ring-4 ring-purple-500"
+                />
+
+                <h2 className="mt-4 text-2xl font-black text-gray-900 dark:text-white">
+                  {profileData.name}
+                </h2>
+
+                <p className="text-gray-500 mt-1">
+                  {
+                    profileData.username
+                  }
+                </p>
+
+                <p className="text-sm text-gray-500 mt-3 max-w-sm">
+                  {profileData.bio}
+                </p>
+
+                <div className="flex gap-3 mt-6 w-full">
+
+                  <button
+                    className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white font-bold flex items-center justify-center gap-2"
+                  >
+
+                    <Send size={18} />
+
+                    Message
+
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setShowProfileModal(
+                        false
+                      );
+
+                      onNavigate &&
+                        onNavigate(
+                          "profile"
+                        );
+                    }}
+                    className="flex-1 h-12 rounded-2xl bg-gray-100 dark:bg-[#2a2b2d] text-gray-900 dark:text-white font-bold"
+                  >
+                    View Profile
+                  </button>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
 
       {/* ================= CREATE MODAL ================= */}
 
@@ -777,16 +906,12 @@ export default function TopNavbar({
 
           <div className="flex-1 relative overflow-hidden">
 
-            {/* BG */}
-
             <div
               className="absolute inset-0"
               style={{
                 background,
               }}
             />
-
-            {/* IMAGE */}
 
             {image && (
               <img
@@ -796,13 +921,9 @@ export default function TopNavbar({
               />
             )}
 
-            {/* OVERLAY */}
-
             {image && (
               <div className="absolute inset-0 bg-black/20" />
             )}
-
-            {/* EMPTY STATE */}
 
             {!image &&
               layers.length === 0 && (
@@ -827,8 +948,6 @@ export default function TopNavbar({
 
                 </div>
               )}
-
-            {/* LAYERS */}
 
             {layers.map((layer) => (
               <Rnd
@@ -879,62 +998,11 @@ export default function TopNavbar({
               </Rnd>
             ))}
 
-            {/* TEXT EDITOR */}
-
-            {selectedLayer && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-28 w-[92%] max-w-md z-40">
-
-                <div className="bg-black/60 backdrop-blur-2xl rounded-3xl p-3 border border-white/10 shadow-2xl">
-
-                  <input
-                    value={
-                      selectedLayer.text
-                    }
-                    onChange={(e) =>
-                      updateLayer(
-                        selectedLayer.id,
-                        {
-                          text:
-                            e.target
-                              .value,
-                        }
-                      )
-                    }
-                    placeholder="Edit text..."
-                    className="w-full bg-transparent text-white outline-none text-lg placeholder:text-gray-400"
-                  />
-
-                </div>
-
-              </div>
-            )}
-
-            {/* EMOJI PICKER */}
-
-            {showEmoji && (
-              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 scale-[0.88] sm:scale-100">
-
-                <div className="overflow-hidden rounded-2xl shadow-2xl">
-
-                  <EmojiPicker
-                    theme="dark"
-                    onEmojiClick={
-                      addEmoji
-                    }
-                  />
-
-                </div>
-
-              </div>
-            )}
-
           </div>
 
           {/* TOOLBAR */}
 
           <div className="h-24 bg-[#0f0f10]/95 backdrop-blur-2xl border-t border-white/10 flex items-center justify-around px-4 pb-3 overflow-x-auto">
-
-            {/* TEXT */}
 
             <button
               onClick={addText}
@@ -952,8 +1020,6 @@ export default function TopNavbar({
               </span>
 
             </button>
-
-            {/* IMAGE */}
 
             <button
               onClick={() =>
@@ -985,8 +1051,6 @@ export default function TopNavbar({
               onChange={uploadImage}
             />
 
-            {/* EMOJI */}
-
             <button
               onClick={() =>
                 setShowEmoji(
@@ -1007,8 +1071,6 @@ export default function TopNavbar({
               </span>
 
             </button>
-
-            {/* COLOR */}
 
             <button
               onClick={() => {
@@ -1048,8 +1110,6 @@ export default function TopNavbar({
 
             </button>
 
-            {/* BG */}
-
             <button
               onClick={
                 randomizeBackground
@@ -1070,8 +1130,6 @@ export default function TopNavbar({
               </span>
 
             </button>
-
-            {/* DELETE */}
 
             <button
               onClick={deleteLayer}
@@ -1094,7 +1152,6 @@ export default function TopNavbar({
 
         </div>
       )}
-
     </>
   );
 }
