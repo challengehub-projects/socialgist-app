@@ -1,0 +1,1129 @@
+import React, {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import {
+  Search,
+  Bell,
+  MessageCircle,
+  Home,
+  Users,
+  Tv,
+  Store,
+  Moon,
+  Sun,
+  Plus,
+  Flame,
+  X,
+  Type,
+  Trash2,
+  Palette,
+  Smile,
+  Sparkles,
+  Image as ImageIcon,
+  Wifi,
+  WifiOff,
+  Loader2,
+} from "lucide-react";
+
+import { Rnd } from "react-rnd";
+import EmojiPicker from "emoji-picker-react";
+
+import { supabase } from "../configs/supbase";
+
+import { Preferences } from "@capacitor/preferences";
+import { Network } from "@capacitor/network";
+
+export default function TopNavbar({
+  darkMode,
+  toggleDarkMode,
+  onNavigate,
+  onPostCreated,
+}) {
+  const fileRef = useRef();
+
+  const [showCreateModal, setShowCreateModal] =
+    useState(false);
+
+  const [layers, setLayers] = useState([]);
+
+  const [selected, setSelected] =
+    useState(null);
+
+  const [showEmoji, setShowEmoji] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [syncing, setSyncing] =
+    useState(false);
+
+  const [image, setImage] = useState(null);
+
+  const [description, setDescription] =
+    useState("");
+
+  const [isOnline, setIsOnline] =
+    useState(true);
+
+  // ================= COLORS =================
+
+  const colors = [
+    "#ffffff",
+    "#ff3b30",
+    "#34c759",
+    "#0a84ff",
+    "#ffd60a",
+    "#bf5af2",
+    "#ff9f0a",
+    "#ff2d55",
+    "#00ffd0",
+  ];
+
+  // ================= BACKGROUNDS =================
+
+  const backgrounds = [
+    "linear-gradient(135deg,#667eea 0%,#764ba2 100%)",
+
+    "linear-gradient(135deg,#f093fb 0%,#f5576c 100%)",
+
+    "linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)",
+
+    "linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)",
+
+    "linear-gradient(135deg,#fa709a 0%,#fee140 100%)",
+
+    "linear-gradient(135deg,#30cfd0 0%,#330867 100%)",
+
+    "linear-gradient(135deg,#5ee7df 0%,#b490ca 100%)",
+
+    "linear-gradient(135deg,#ff758c 0%,#ff7eb3 100%)",
+
+    "linear-gradient(135deg,#141e30 0%,#243b55 100%)",
+  ];
+
+  const [background, setBackground] =
+    useState(
+      backgrounds[
+        Math.floor(
+          Math.random() *
+            backgrounds.length
+        )
+      ]
+    );
+
+  // ================= NETWORK =================
+
+  useEffect(() => {
+  checkNetwork();
+
+  let listener;
+
+  const setupListener = async () => {
+    listener =
+      await Network.addListener(
+        "networkStatusChange",
+        (status) => {
+          setIsOnline(
+            status.connected
+          );
+
+          if (
+            status.connected
+          ) {
+            syncOfflinePosts();
+          }
+        }
+      );
+  };
+
+  setupListener();
+
+  return () => {
+    if (listener) {
+      listener.remove();
+    }
+  };
+}, []);
+
+  const checkNetwork = async () => {
+    const status =
+      await Network.getStatus();
+
+    setIsOnline(status.connected);
+  };
+
+  // ================= SYNC OFFLINE POSTS =================
+
+  const syncOfflinePosts = async () => {
+    try {
+      setSyncing(true);
+
+      const { value } =
+        await Preferences.get({
+          key: "offline_posts",
+        });
+
+      let posts = value
+        ? JSON.parse(value)
+        : [];
+
+      if (posts.length === 0) {
+        setSyncing(false);
+        return;
+      }
+
+      for (const post of posts) {
+        await supabase
+          .from("posts")
+          .insert(post);
+      }
+
+      await Preferences.remove({
+        key: "offline_posts",
+      });
+
+      if (onPostCreated) {
+        onPostCreated();
+      }
+
+    } catch (err) {
+      console.log(err);
+    }
+
+    setSyncing(false);
+  };
+
+  // ================= SAVE OFFLINE =================
+
+  const saveOfflinePost = async (
+    payload
+  ) => {
+    const { value } =
+      await Preferences.get({
+        key: "offline_posts",
+      });
+
+    let posts = value
+      ? JSON.parse(value)
+      : [];
+
+    posts.push(payload);
+
+    await Preferences.set({
+      key: "offline_posts",
+      value: JSON.stringify(posts),
+    });
+  };
+
+  // ================= ICON BTN =================
+
+  const iconBtn =
+    "relative flex items-center justify-center h-11 w-11 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-[#3A3B3C] dark:hover:bg-[#4E4F50] text-gray-700 dark:text-gray-200 transition shrink-0 active:scale-95";
+
+  const badge =
+    "absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold text-white bg-purple-600 rounded-full";
+
+  // ================= IMAGE UPLOAD =================
+
+  const uploadImage = async (e) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    const preview =
+      URL.createObjectURL(file);
+
+    setImage(preview);
+  };
+
+  // ================= ADD TEXT =================
+
+  const addText = () => {
+    const randomColor =
+      colors[
+        Math.floor(
+          Math.random() *
+            colors.length
+        )
+      ];
+
+    const id = Date.now();
+
+    setLayers((prev) => [
+      ...prev,
+      {
+        id,
+
+        type: "text",
+
+        text: "Tap to edit",
+
+        x: 90,
+
+        y: 220,
+
+        color: randomColor,
+
+        fontSize: 34,
+      },
+    ]);
+
+    setSelected(id);
+  };
+
+  // ================= UPDATE LAYER =================
+
+  const updateLayer = (
+    id,
+    changes
+  ) => {
+    setLayers((prev) =>
+      prev.map((l) =>
+        l.id === id
+          ? {
+              ...l,
+              ...changes,
+            }
+          : l
+      )
+    );
+  };
+
+  // ================= DELETE LAYER =================
+
+  const deleteLayer = () => {
+    if (!selected) return;
+
+    setLayers((prev) =>
+      prev.filter(
+        (l) => l.id !== selected
+      )
+    );
+
+    setSelected(null);
+  };
+
+  // ================= RANDOM BG =================
+
+  const randomizeBackground = () => {
+    const random =
+      backgrounds[
+        Math.floor(
+          Math.random() *
+            backgrounds.length
+        )
+      ];
+
+    setBackground(random);
+  };
+
+  // ================= RESET =================
+
+  const resetEditor = () => {
+    setLayers([]);
+
+    setSelected(null);
+
+    setImage(null);
+
+    setDescription("");
+
+    setShowCreateModal(false);
+
+    setLoading(false);
+
+    setBackground(
+      backgrounds[
+        Math.floor(
+          Math.random() *
+            backgrounds.length
+        )
+      ]
+    );
+  };
+
+  // ================= EMOJI =================
+
+  const selectedLayer = layers.find(
+    (l) => l.id === selected
+  );
+
+  const addEmoji = (emojiData) => {
+    if (!selectedLayer) return;
+
+    updateLayer(selectedLayer.id, {
+      text:
+        selectedLayer.text +
+        emojiData.emoji,
+    });
+  };
+
+  // ================= CREATE POST =================
+
+  const createPost = async () => {
+    if (
+      layers.length === 0 &&
+      !image &&
+      !description.trim()
+    ) {
+      alert(
+        "Create something before posting"
+      );
+
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { data: userData } =
+        await supabase.auth.getUser();
+
+      if (!userData?.user) {
+        alert("Please login first");
+
+        setLoading(false);
+
+        return;
+      }
+
+      let uploadedImage = null;
+
+      // ================= UPLOAD IMAGE =================
+
+      if (image && isOnline) {
+        const response = await fetch(
+          image
+        );
+
+        const blob =
+          await response.blob();
+
+        const fileName = `${Date.now()}-${Math.random()}.jpg`;
+
+        const {
+          error: uploadError,
+        } = await supabase.storage
+          .from("post-images")
+          .upload(fileName, blob, {
+            contentType:
+              "image/jpeg",
+
+            upsert: true,
+          });
+
+        if (!uploadError) {
+          const { data } =
+            supabase.storage
+              .from(
+                "post-images"
+              )
+              .getPublicUrl(
+                fileName
+              );
+
+          uploadedImage =
+            data.publicUrl;
+        }
+      }
+
+      // ================= PAYLOAD =================
+
+      const payload = {
+        user_id: userData.user.id,
+
+        profile_name:
+          userData.user
+            .user_metadata
+            ?.full_name ||
+          "Anonymous",
+
+        profile_image:
+          userData.user
+            .user_metadata
+            ?.avatar_url ||
+          "",
+
+        type: image
+          ? "image_post"
+          : "text_post",
+
+        description,
+
+        image: uploadedImage,
+
+        content: {
+          background,
+          layers,
+        },
+      };
+
+      // ================= OFFLINE =================
+
+      if (!isOnline) {
+        await saveOfflinePost(payload);
+
+        alert(
+          "No internet. Post saved offline and will sync automatically."
+        );
+
+        resetEditor();
+
+        return;
+      }
+
+      // ================= INSERT =================
+
+      const { error } =
+        await supabase
+          .from("posts")
+          .insert(payload);
+
+      if (error) {
+        console.log(error);
+
+        alert(error.message);
+
+        setLoading(false);
+
+        return;
+      }
+
+      if (onPostCreated) {
+        onPostCreated();
+      }
+
+      resetEditor();
+
+    } catch (err) {
+      console.log(err);
+
+      alert(
+        "Something went wrong"
+      );
+    }
+
+    setLoading(false);
+  };
+
+  return (
+    <>
+      {/* ================= NAVBAR ================= */}
+
+      <header className="sticky top-0 z-50 bg-white/95 dark:bg-[#18191A]/95 backdrop-blur-xl border-b border-gray-200 dark:border-[#2d2f31]">
+
+        <div className="h-16 px-3 sm:px-4 flex items-center justify-between">
+
+          {/* LEFT */}
+
+          <div className="flex items-center gap-3">
+
+            <div
+              onClick={() =>
+                onNavigate &&
+                onNavigate(
+                  "profile"
+                )
+              }
+              className="relative cursor-pointer"
+            >
+
+              <img
+                src="https://i.pravatar.cc/150?img=12"
+                alt=""
+                className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500"
+              />
+
+              <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 border-2 border-white rounded-full" />
+
+            </div>
+
+            <div className="leading-tight">
+
+              <h1 className="text-lg sm:text-2xl font-black bg-gradient-to-r from-purple-700 to-fuchsia-600 bg-clip-text text-transparent">
+                SocialGist
+              </h1>
+
+              <p className="hidden sm:block text-[11px] text-gray-500">
+                connect • vibe • gist
+              </p>
+
+            </div>
+
+          </div>
+
+          {/* DESKTOP NAV */}
+
+          <div className="hidden lg:flex items-center gap-2 flex-1 justify-center">
+
+            <NavButton
+              icon={
+                <Home className="h-5 w-5" />
+              }
+              label="Home"
+              active
+            />
+
+            <NavButton
+              icon={
+                <Users className="h-5 w-5" />
+              }
+              label="Friends"
+            />
+
+            <NavButton
+              icon={
+                <Tv className="h-5 w-5" />
+              }
+              label="Videos"
+            />
+
+            <NavButton
+              icon={
+                <Store className="h-5 w-5" />
+              }
+              label="Market"
+            />
+
+            <NavButton
+              icon={
+                <Flame className="h-5 w-5" />
+              }
+              label="Trending"
+            />
+
+          </div>
+
+          {/* RIGHT */}
+
+          <div className="flex items-center gap-2">
+
+            {/* ONLINE STATUS */}
+
+            <div
+              className={`hidden sm:flex items-center gap-2 px-3 h-10 rounded-full text-xs font-bold ${
+                isOnline
+                  ? "bg-green-500/10 text-green-500"
+                  : "bg-red-500/10 text-red-500"
+              }`}
+            >
+
+              {isOnline ? (
+                <Wifi size={14} />
+              ) : (
+                <WifiOff size={14} />
+              )}
+
+              {isOnline
+                ? syncing
+                  ? "Syncing"
+                  : "Online"
+                : "Offline"}
+
+            </div>
+
+            <button
+              className={`${iconBtn} md:hidden`}
+            >
+              <Search size={18} />
+            </button>
+
+            {/* CREATE */}
+
+            <button
+              onClick={() =>
+                setShowCreateModal(
+                  true
+                )
+              }
+              className="bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:opacity-90 text-white h-11 px-4 rounded-full flex items-center gap-2 font-semibold shadow-xl active:scale-95 transition"
+            >
+
+              <Plus size={18} />
+
+              <span className="hidden sm:block">
+                Create
+              </span>
+
+            </button>
+
+            {/* DARK */}
+
+            <button
+              onClick={
+                toggleDarkMode
+              }
+              className={`${iconBtn} hidden sm:flex`}
+            >
+              {darkMode ? (
+                <Sun size={18} />
+              ) : (
+                <Moon size={18} />
+              )}
+            </button>
+
+            {/* MSG */}
+
+            <button className={iconBtn}>
+
+              <MessageCircle
+                size={18}
+              />
+
+              <span className={badge}>
+                4
+              </span>
+
+            </button>
+
+            {/* NOTIF */}
+
+            <button className={iconBtn}>
+
+              <Bell size={18} />
+
+              <span
+                className={`${badge} bg-red-500`}
+              >
+                9
+              </span>
+
+            </button>
+
+          </div>
+
+        </div>
+
+      </header>
+
+      {/* ================= CREATE MODAL ================= */}
+
+      {showCreateModal && (
+        <div className="fixed inset-0 z-[999] bg-black flex flex-col overflow-hidden touch-none">
+
+          {/* TOP */}
+
+          <div className="h-16 px-4 flex items-center justify-between border-b border-white/10 bg-black/40 backdrop-blur-xl">
+
+            <button
+              onClick={() =>
+                setShowCreateModal(
+                  false
+                )
+              }
+              className="text-white"
+            >
+              <X size={28} />
+            </button>
+
+            <h1 className="text-white font-semibold text-lg">
+              Create Post
+            </h1>
+
+            <button
+              onClick={
+                createPost
+              }
+              disabled={loading}
+              className="bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 px-5 py-2.5 rounded-full text-white text-sm font-bold shadow-2xl disabled:opacity-50"
+            >
+
+              <div className="flex items-center gap-2">
+
+                {loading ? (
+                  <Loader2
+                    size={16}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Sparkles
+                    size={16}
+                  />
+                )}
+
+                {loading
+                  ? "Posting..."
+                  : "Post"}
+
+              </div>
+
+            </button>
+
+          </div>
+
+          {/* DESCRIPTION */}
+
+          <div className="px-4 py-3 border-b border-white/10 bg-black/30 backdrop-blur-xl">
+
+            <textarea
+              value={description}
+              onChange={(e) =>
+                setDescription(
+                  e.target.value
+                )
+              }
+              placeholder="What's on your mind?"
+              rows={2}
+              className="w-full bg-transparent text-white placeholder:text-gray-400 outline-none resize-none text-base"
+            />
+
+          </div>
+
+          {/* CANVAS */}
+
+          <div className="flex-1 relative overflow-hidden">
+
+            {/* BG */}
+
+            <div
+              className="absolute inset-0"
+              style={{
+                background,
+              }}
+            />
+
+            {/* IMAGE */}
+
+            {image && (
+              <img
+                src={image}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
+            )}
+
+            {/* OVERLAY */}
+
+            {image && (
+              <div className="absolute inset-0 bg-black/20" />
+            )}
+
+            {/* EMPTY STATE */}
+
+            {!image &&
+              layers.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center">
+
+                  <div className="text-center text-white/70 px-6">
+
+                    <ImageIcon
+                      size={60}
+                      className="mx-auto mb-4"
+                    />
+
+                    <h2 className="text-2xl font-black mb-2">
+                      Create something beautiful
+                    </h2>
+
+                    <p className="text-sm opacity-80">
+                      Add photos, text, emojis and captions
+                    </p>
+
+                  </div>
+
+                </div>
+              )}
+
+            {/* LAYERS */}
+
+            {layers.map((layer) => (
+              <Rnd
+                key={layer.id}
+                bounds="parent"
+                enableResizing={false}
+                position={{
+                  x: layer.x,
+                  y: layer.y,
+                }}
+                onDragStop={(e, d) => {
+                  updateLayer(
+                    layer.id,
+                    {
+                      x: d.x,
+                      y: d.y,
+                    }
+                  );
+                }}
+                onClick={() =>
+                  setSelected(
+                    layer.id
+                  )
+                }
+              >
+
+                <div
+                  className={`font-black select-none transition ${
+                    selected ===
+                    layer.id
+                      ? "scale-105"
+                      : ""
+                  }`}
+                  style={{
+                    fontSize:
+                      layer.fontSize,
+
+                    color:
+                      layer.color,
+
+                    textShadow:
+                      "0 4px 20px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  {layer.text}
+                </div>
+
+              </Rnd>
+            ))}
+
+            {/* TEXT EDITOR */}
+
+            {selectedLayer && (
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-28 w-[92%] max-w-md z-40">
+
+                <div className="bg-black/60 backdrop-blur-2xl rounded-3xl p-3 border border-white/10 shadow-2xl">
+
+                  <input
+                    value={
+                      selectedLayer.text
+                    }
+                    onChange={(e) =>
+                      updateLayer(
+                        selectedLayer.id,
+                        {
+                          text:
+                            e.target
+                              .value,
+                        }
+                      )
+                    }
+                    placeholder="Edit text..."
+                    className="w-full bg-transparent text-white outline-none text-lg placeholder:text-gray-400"
+                  />
+
+                </div>
+
+              </div>
+            )}
+
+            {/* EMOJI PICKER */}
+
+            {showEmoji && (
+              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 scale-[0.88] sm:scale-100">
+
+                <div className="overflow-hidden rounded-2xl shadow-2xl">
+
+                  <EmojiPicker
+                    theme="dark"
+                    onEmojiClick={
+                      addEmoji
+                    }
+                  />
+
+                </div>
+
+              </div>
+            )}
+
+          </div>
+
+          {/* TOOLBAR */}
+
+          <div className="h-24 bg-[#0f0f10]/95 backdrop-blur-2xl border-t border-white/10 flex items-center justify-around px-4 pb-3 overflow-x-auto">
+
+            {/* TEXT */}
+
+            <button
+              onClick={addText}
+              className="flex flex-col items-center text-white shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center">
+
+                <Type size={20} />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                Text
+              </span>
+
+            </button>
+
+            {/* IMAGE */}
+
+            <button
+              onClick={() =>
+                fileRef.current.click()
+              }
+              className="flex flex-col items-center text-white shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-blue-500/20 flex items-center justify-center">
+
+                <ImageIcon
+                  size={20}
+                />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                Photo
+              </span>
+
+            </button>
+
+            <input
+              ref={fileRef}
+              type="file"
+              hidden
+              accept="image/*"
+              capture="environment"
+              onChange={uploadImage}
+            />
+
+            {/* EMOJI */}
+
+            <button
+              onClick={() =>
+                setShowEmoji(
+                  (p) => !p
+                )
+              }
+              className="flex flex-col items-center text-white shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-yellow-500/20 flex items-center justify-center">
+
+                <Smile size={20} />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                Emoji
+              </span>
+
+            </button>
+
+            {/* COLOR */}
+
+            <button
+              onClick={() => {
+                if (
+                  !selectedLayer
+                )
+                  return;
+
+                const randomColor =
+                  colors[
+                    Math.floor(
+                      Math.random() *
+                        colors.length
+                    )
+                  ];
+
+                updateLayer(
+                  selectedLayer.id,
+                  {
+                    color:
+                      randomColor,
+                  }
+                );
+              }}
+              className="flex flex-col items-center text-white shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-pink-500/20 flex items-center justify-center">
+
+                <Palette size={20} />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                Color
+              </span>
+
+            </button>
+
+            {/* BG */}
+
+            <button
+              onClick={
+                randomizeBackground
+              }
+              className="flex flex-col items-center text-white shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+
+                <Sparkles
+                  size={20}
+                />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                BG
+              </span>
+
+            </button>
+
+            {/* DELETE */}
+
+            <button
+              onClick={deleteLayer}
+              className="flex flex-col items-center text-red-500 shrink-0"
+            >
+
+              <div className="h-12 w-12 rounded-2xl bg-red-500/10 flex items-center justify-center">
+
+                <Trash2 size={20} />
+
+              </div>
+
+              <span className="text-[11px] mt-1">
+                Delete
+              </span>
+
+            </button>
+
+          </div>
+
+        </div>
+      )}
+
+    </>
+  );
+}
+
+/* ================= NAV BUTTON ================= */
+
+function NavButton({
+  icon,
+  label,
+  active,
+}) {
+  return (
+    <button
+      className={`flex flex-col items-center justify-center h-14 min-w-[90px] px-4 rounded-2xl transition ${
+        active
+          ? "text-purple-600"
+          : "text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3B3C]"
+      }`}
+    >
+
+      <div className="h-6 w-6 flex items-center justify-center">
+        {icon}
+      </div>
+
+      <span className="text-xs mt-1">
+        {label}
+      </span>
+
+    </button>
+  );
+}
+
