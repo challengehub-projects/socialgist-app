@@ -3,6 +3,7 @@
 import React, {
   useEffect,
   useState,
+  lazy
 } from "react";
 
 import { supabase } from "./configs/supbase";
@@ -18,6 +19,8 @@ import HomeFeedPage from "./pages/feed";
 import TopNavbar from "./pages/navbar";
 
 import Messages from "./pages/messeges";
+import ProfilePage from "./pages/profile";
+import ProfileModal from "./pages/profileModal";
 
 export default function App() {
 
@@ -249,6 +252,34 @@ export default function App() {
           setPage("feed")
         }
 
+      />
+    );
+  }
+
+
+  // ============ profile =============
+
+    if (page === "profile") {
+
+    return (
+      <ProfilePage
+
+        post={selectedPost}
+
+        onBack={() =>
+          setPage("feed")
+        }
+
+      />
+    );
+  }
+
+
+    if (page === "profileModal") {
+
+    return (
+      <ProfileModal
+    onNavigate={setPage}
       />
     );
   }
