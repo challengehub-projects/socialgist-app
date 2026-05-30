@@ -18,6 +18,7 @@ import {
   Sparkles,
   Users,
 } from "lucide-react";
+import { GiConsoleController } from "react-icons/gi";
 
 
 export default function Feed({
@@ -40,6 +41,12 @@ export default function Feed({
 
   const [animatingLike, setAnimatingLike] =
     useState(null);
+
+
+  const [page, setPage] = useState(0);
+  const POSTS_PER_PAGE = 5;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // ================= TOAST =================
 
@@ -67,13 +74,13 @@ export default function Feed({
           key: `image_${fileName}`,
         });
 
-      // RETURN CACHED IMAGE
+      // ALREADY CACHED
 
       if (existing.value) {
         return existing.value;
       }
 
-      // DOWNLOAD IMAGE
+      // DOWNLOAD
 
       const response =
         await fetch(imageUrl);
@@ -88,33 +95,57 @@ export default function Feed({
         (resolve) => {
           reader.onloadend =
             async () => {
-              const base64 =
-                reader.result.split(
-                  ","
-                )[1];
+              try {
+                const base64 =
+                  reader.result.split(
+                    ","
+                  )[1];
 
-              await Filesystem.writeFile(
-                {
-                  path: `socialgist/${fileName}`,
-                  data: base64,
-                  directory:
-                    Directory.Data,
-                }
-              );
+                const filePath = `socialgist/${fileName}`;
 
-              const localPath = `file://${fileName}`;
+                // SAVE FILE
 
-              await Preferences.set(
-                {
-                  key: `image_${fileName}`,
-                  value:
-                    localPath,
-                }
-              );
+                await Filesystem.writeFile(
+                  {
+                    path: filePath,
+                    data: base64,
+                    directory:
+                      Directory.Data,
+                  }
+                );
 
-              resolve(
-                localPath
-              );
+                // GET REAL URI
+
+                const uriResult =
+                  await Filesystem.getUri(
+                    {
+                      path: filePath,
+                      directory:
+                        Directory.Data,
+                    }
+                  );
+
+                const localPath =
+                  uriResult.uri;
+
+                await Preferences.set(
+                  {
+                    key: `image_${fileName}`,
+                    value:
+                      localPath,
+                  }
+                );
+
+                resolve(
+                  localPath
+                );
+              } catch (err) {
+                console.log(err);
+
+                resolve(
+                  imageUrl
+                );
+              }
             };
 
           reader.readAsDataURL(
@@ -131,7 +162,6 @@ export default function Feed({
       return imageUrl;
     }
   };
-
   // ================= CACHE ALL POST IMAGES =================
 
   const cachePostImages =
@@ -143,8 +173,9 @@ export default function Feed({
               async (post) => {
                 if (
                   !post.image
-                )
+                ) {
                   return post;
+                }
 
                 const fileName = `post_${post.id}.jpg`;
 
@@ -166,7 +197,10 @@ export default function Feed({
 
         return updated;
       } catch (err) {
-        console.log(err);
+        console.log(
+          "CACHE POSTS ERROR:",
+          err
+        );
 
         return postsData;
       }
@@ -174,82 +208,149 @@ export default function Feed({
 
   // ================= OFFLINE LIKE QUEUE =================
 
-  const savePendingLike =
-    async (
-      postId,
-      likesCount
-    ) => {
-      try {
-        const {
-          value,
-        } =
-          await Preferences.get(
-            {
-              key: "pending_likes",
-            }
+  const savePendingLike = async (postId) => {
+    try {
+      const { value } = await Preferences.get({
+        key: "pending_likes",
+      });
+
+      const pending = value
+        ? JSON.parse(value)
+        : [];
+
+      pending.push({
+        postId,
+        type: "like",
+      });
+
+      await Preferences.set({
+        key: "pending_likes",
+        value: JSON.stringify(pending),
+      });
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+
+  const loadMorePosts = async () => {
+    if (
+      loadingMore ||
+      !hasMore ||
+      refreshing
+    )
+      return;
+
+    setLoadingMore(true);
+
+    const nextPage = page + 1;
+
+    try {
+      const from =
+        nextPage * POSTS_PER_PAGE;
+
+      const to =
+        from + POSTS_PER_PAGE - 1;
+
+      const { data, error } =
+        await supabase
+          .from("posts")
+          .select("*")
+          .order("created_at", {
+            ascending: false,
+          })
+          .range(from, to);
+
+      if (error) {
+        console.log(error);
+        return;
+      }
+
+      if (data?.length) {
+        setPosts((prev) => {
+          const existingIds = new Set(
+            prev.map((p) => p.id)
           );
 
-        const parsed =
-          value
-            ? JSON.parse(
-              value
-            )
-            : [];
+          const newPosts = data.filter(
+            (post) => !existingIds.has(post.id)
+          );
 
-        parsed.push({
-          postId,
-          likesCount,
+          return [...prev, ...newPosts];
         });
+        setPage(nextPage);
 
-        await Preferences.set({
-          key: "pending_likes",
-          value:
-            JSON.stringify(
-              parsed
-            ),
-        });
-      } catch (err) {
-        console.log(err);
+        if (
+          data.length <
+          POSTS_PER_PAGE
+        ) {
+          setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
       }
-    };
+    } catch (err) {
+      console.log(err);
+    }
+
+    setLoadingMore(false);
+  };
 
   // ================= SYNC OFFLINE LIKES =================
 
-  const syncOfflineLikes =
-    async () => {
-      try {
-        const {
-          value,
-        } =
-          await Preferences.get({
-            key: "pending_likes",
-          });
-
-        if (!value) return;
-
-        const pending =
-          JSON.parse(value);
-
-        for (const like of pending) {
-          await supabase
-            .from("posts")
-            .update({
-              likes_count:
-                like.likesCount,
-            })
-            .eq(
-              "id",
-              like.postId
-            );
-        }
-
-        await Preferences.remove({
+  const syncOfflineLikes = async () => {
+    try {
+      const { value } =
+        await Preferences.get({
           key: "pending_likes",
         });
-      } catch (err) {
-        console.log(err);
+
+      if (!value) return;
+
+      const pending =
+        JSON.parse(value);
+
+      for (const item of pending) {
+        const {
+          data: currentPost,
+        } = await supabase
+          .from("posts")
+          .select("likes_count")
+          .eq("id", item.postId)
+          .single();
+
+        const currentLikes =
+          currentPost?.likes_count || 0;
+
+        const newLikes =
+          item.action === "unlike"
+            ? Math.max(
+              0,
+              currentLikes - 1
+            )
+            : currentLikes + 1;
+
+        await supabase
+          .from("posts")
+          .update({
+            likes_count: newLikes,
+          })
+          .eq(
+            "id",
+            item.postId
+          );
       }
-    };
+
+      await Preferences.remove({
+        key: "pending_likes",
+      });
+
+      await fetchPosts();
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
 
   // ================= CACHE POSTS =================
 
@@ -331,7 +432,6 @@ export default function Feed({
 
   // ================= FETCH POSTS =================
 
-  // ================= FETCH POSTS =================
 
   const fetchPosts = async (
     showLoader = false
@@ -351,11 +451,15 @@ export default function Feed({
       if (!status.connected) {
         await loadCachedPosts();
 
+
         setRefreshing(false);
         setLoading(false);
 
         return;
       }
+
+      const from = page * POSTS_PER_PAGE;
+      const to = from + POSTS_PER_PAGE - 1;
 
       const { data, error } =
         await supabase
@@ -363,7 +467,15 @@ export default function Feed({
           .select("*")
           .order("created_at", {
             ascending: false,
-          });
+          })
+          .range(from, to);
+      /*      const { data, error } =
+             await supabase
+               .from("posts")
+               .select("*")
+               .order("created_at", {
+                 ascending: false,
+               }); */
 
       if (error) {
         console.log(error);
@@ -374,14 +486,18 @@ export default function Feed({
         return;
       }
 
+
+      console.log(data)
+
       if (data) {
         let formatted =
           data.map((post) => ({
             ...post,
             likes_count:
-              post.likes_count ||
-              0,
+              post.likes_count,
           }));
+
+
 
         // CACHE IMAGES
 
@@ -390,7 +506,35 @@ export default function Feed({
             formatted
           );
 
-        setPosts(formatted);
+        /*   setPosts(formatted); */
+
+        setPosts((prev) => {
+          const merged =
+            page === 0
+              ? formatted
+              : [...prev, ...formatted];
+
+          const uniquePosts =
+            merged.filter(
+              (post, index, self) =>
+                index ===
+                self.findIndex(
+                  (p) => p.id === post.id
+                )
+            );
+
+          return uniquePosts;
+        });
+
+
+        if (
+          !data ||
+          data.length < POSTS_PER_PAGE
+        ) {
+          setHasMore(false);
+        } else {
+          setHasMore(true);
+        }
 
         await cachePosts(
           formatted
@@ -421,48 +565,248 @@ export default function Feed({
 
   // ================= REALTIME =================
 
-  useEffect(() => {
-    const channel = supabase
-      .channel("feed-realtime")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "posts",
-        },
-        (payload) => {
-          const updatedPost =
-            payload.new;
-
-          if (!updatedPost) return;
-
-          setPosts((prev) => {
-            const updated =
+  /*   useEffect(() => {
+      const channel = supabase
+        .channel("realtime-posts")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "posts",
+          },
+          (payload) => {
+            const updatedPost =
+              payload.new;
+  
+            setPosts((prev) =>
               prev.map((post) =>
-                post.id ===
-                  updatedPost.id
+                post.id === updatedPost.id
                   ? {
                     ...post,
-                    ...updatedPost,
+                    likes_count:
+                      updatedPost.likes_count,
                   }
                   : post
-              );
+              )
+            );
+          }
+        )
+        .subscribe();
+  
+       console.log(channel)
+  
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, []); */
 
-            cachePosts(updated);
+  useEffect(() => {
 
-            return updated;
-          });
+    // Create a realtime channel.
+    // The name "feed-realtime" is just an identifier.
+    // It can be any string.
+    const channel = supabase
+
+
+      .channel("feed-realtime")
+
+      // Listen for PostgreSQL changes
+      .on(
+        "postgres_changes",
+
+        {
+          // Listen to ALL database events
+          // INSERT = new row
+          // UPDATE = existing row changed
+          // DELETE = row removed
+          event: "*",
+
+          // Database schema
+          schema: "public",
+
+          // Table to watch
+          table: "posts",
+        },
+
+        // This callback runs every time
+        // something changes in the posts table
+        async (payload) => {
+
+          console.log(
+            "🔥 REALTIME PAYLOAD:",
+            payload
+          );
+
+          /*
+            Example payload for UPDATE:
+      
+            {
+              eventType: "UPDATE",
+      
+              old: {
+                id: "123",
+                likes_count: 5
+              },
+      
+              new: {
+                id: "123",
+                likes_count: 6
+              }
+            }
+          */
+
+          // ====================================
+          // INSERT
+          // ====================================
+
+          if (
+            payload.eventType ===
+            "INSERT"
+          ) {
+
+            console.log(
+              "➕ NEW POST:",
+              payload.new
+            );
+
+            // Add new post to top of feed
+
+            setPosts((prev) => [
+
+              payload.new,
+
+              ...prev,
+
+            ]);
+
+            return;
+          }
+
+          // ====================================
+          // UPDATE
+          // ====================================
+
+          if (
+            payload.eventType ===
+            "UPDATE"
+          ) {
+
+            console.log(
+              "✏️ POST UPDATED:",
+              payload.new
+            );
+
+            /*
+              Example:
+      
+              Before:
+              likes_count = 5
+      
+              Another user likes:
+      
+              After:
+              likes_count = 6
+            */
+
+            setPosts((prev) =>
+
+              prev.map((post) =>
+
+                // Find the post that changed
+
+                post.id ===
+                  payload.new.id
+
+                  ? {
+
+                    // Keep old data
+
+                    ...post,
+
+                    // Replace with latest
+                    // values from database
+
+                    ...payload.new,
+
+                  }
+
+                  : post
+
+              )
+
+            );
+
+            return;
+          }
+
+          // ====================================
+          // DELETE
+          // ====================================
+
+          if (
+            payload.eventType ===
+            "DELETE"
+          ) {
+
+            console.log(
+              "🗑️ POST DELETED:",
+              payload.old
+            );
+
+            setPosts((prev) =>
+
+              prev.filter(
+
+                (post) =>
+
+                  post.id !==
+                  payload.old.id
+
+              )
+
+            );
+          }
         }
       )
-      .subscribe();
+
+      // Subscribe to channel
+      .subscribe((status) => {
+
+        console.log(
+          "📡 CHANNEL STATUS:",
+          status
+        );
+
+        /*
+          Possible values:
+      
+          SUBSCRIBED
+          CHANNEL_ERROR
+          TIMED_OUT
+          CLOSED
+        */
+      });
+
+
+    // Cleanup when component unmounts
 
     return () => {
+
+
+      console.log(
+        "❌ REMOVING CHANNEL"
+      );
+
       supabase.removeChannel(
         channel
       );
+
     };
+
   }, []);
+
+
 
   // ================= NETWORK =================
 
@@ -513,6 +857,7 @@ export default function Feed({
 
               fetchPosts();
             } else {
+              setHasMore(false)
               await showToast(
                 "You're offline"
               );
@@ -524,144 +869,87 @@ export default function Feed({
     setupNetwork();
   }, []);
 
-  // ================= REALTIME POSTS + LIKES =================
+
+
 
   useEffect(() => {
+    const handleScroll = () => {
+      const scrollTop =
+        window.scrollY;
 
-    const channel = supabase
-      .channel(
-        "realtime-posts"
-      )
+      const windowHeight =
+        window.innerHeight;
 
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "posts",
-        },
-        (payload) => {
+      const fullHeight =
+        document.documentElement
+          .scrollHeight;
 
-          const updatedPost =
-            payload.new;
-
-          if (!updatedPost)
-            return;
-
-          // UPDATE UI LIVE
-
-          setPosts((prev) => {
-
-            const updated =
-              prev.map((post) =>
-                post.id ===
-                  updatedPost.id
-                  ? {
-                    ...post,
-                    ...updatedPost,
-                  }
-                  : post
-              );
-
-            cachePosts(
-              updated
-            );
-
-            return updated;
-          });
-        }
-      )
-
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(
-        channel
-      );
+      if (
+        scrollTop +
+        windowHeight >=
+        fullHeight - 500
+      ) {
+        loadMorePosts();
+      }
     };
 
-  }, []);
+    window.addEventListener(
+      "scroll",
+      handleScroll
+    );
+
+    return () =>
+      window.removeEventListener(
+        "scroll",
+        handleScroll
+      );
+  }, [posts, hasMore]);
 
   // ================= LIKE =================
 
   // ================= LIKE POST =================
-
-  // ================= LIKE POST =================
-
-  const likePost = async (
-    postId
-  ) => {
+  const likePost = async (postId) => {
     try {
-      const alreadyLiked =
-        likedPosts[postId];
+      const alreadyLiked = likedPosts[postId];
 
-      setAnimatingLike(
-        postId
-      );
+      setAnimatingLike(postId);
 
       setTimeout(() => {
-        setAnimatingLike(
-          null
-        );
+        setAnimatingLike(null);
       }, 400);
 
-      // UPDATE UI
+      // UPDATE UI IMMEDIATELY
 
-      const updatedPosts =
-        posts.map((post) => {
-          if (
-            post.id === postId
-          ) {
-            return {
-              ...post,
-              likes_count:
-                alreadyLiked
-                  ? Math.max(
-                    0,
-                    (
-                      post.likes_count ||
-                      0
-                    ) - 1
-                  )
-                  : (
-                    post.likes_count ||
-                    0
-                  ) + 1,
-            };
-          }
+      const updatedPosts = posts.map((post) => {
+        if (post.id === postId) {
+          return {
+            ...post,
+            likes_count: alreadyLiked
+              ? Math.max(
+                0,
+                (post.likes_count || 0) - 1
+              )
+              : (post.likes_count || 0) + 1,
+          };
+        }
 
-          return post;
-        });
+        return post;
+      });
 
       setPosts(updatedPosts);
 
-      await cachePosts(
-        updatedPosts
-      );
+      await cachePosts(updatedPosts);
 
-      // SAVE LIKE STATE
+      // SAVE LOCAL LIKE STATE
 
       const updatedLikes = {
         ...likedPosts,
-        [postId]:
-          !alreadyLiked,
+        [postId]: !alreadyLiked,
       };
 
-      setLikedPosts(
-        updatedLikes
-      );
+      setLikedPosts(updatedLikes);
 
-      await cacheLikes(
-        updatedLikes
-      );
-
-      // TARGET POST
-
-      const targetPost =
-        updatedPosts.find(
-          (p) =>
-            p.id === postId
-        );
+      await cacheLikes(updatedLikes);
 
       // CHECK NETWORK
 
@@ -671,33 +959,89 @@ export default function Feed({
       // OFFLINE
 
       if (!status.connected) {
-        await savePendingLike(
+        const { value } =
+          await Preferences.get({
+            key: "pending_likes",
+          });
+
+        const pending = value
+          ? JSON.parse(value)
+          : [];
+
+        pending.push({
           postId,
-          targetPost.likes_count
-        );
+          action: alreadyLiked
+            ? "unlike"
+            : "like",
+        });
+
+        await Preferences.set({
+          key: "pending_likes",
+          value: JSON.stringify(
+            pending
+          ),
+        });
 
         return;
       }
 
-      // ONLINE UPDATE
+      // ONLINE
+
+      const {
+        data: currentPost,
+        error: fetchError,
+      } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single();
+
+      if (fetchError) {
+        console.log(fetchError);
+        return;
+      }
+
+      const currentLikes =
+        currentPost?.likes_count || 0;
+
+      const newLikes = alreadyLiked
+        ? Math.max(
+          0,
+          currentLikes - 1
+        )
+        : currentLikes + 1;
 
       const { error } =
         await supabase
           .from("posts")
           .update({
-            likes_count:
-              targetPost.likes_count,
+            likes_count: newLikes,
           })
           .eq("id", postId);
 
       if (error) {
         console.log(error);
       }
+
+
+      const {
+        data: updatedPost,
+      } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single();
+
+
+      console.log(
+        "LATEST DB LIKE COUNT:",
+        updatedPost.likes_count
+      );
+
     } catch (err) {
       console.log(err);
     }
   };
-
 
   // ================= SHARE =================
 
@@ -883,6 +1227,10 @@ ${post.likes_count || 0} likes
           const parsed =
             post.content || {};
 
+
+
+          console.log(post)
+
           return (
             <div
               key={post.id}
@@ -1015,6 +1363,8 @@ ${post.likes_count || 0} likes
               <div className="px-4 py-3">
                 {/* COUNTS */}
 
+
+
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white">
@@ -1115,6 +1465,17 @@ ${post.likes_count || 0} likes
             </div>
           );
         })}
+
+        {
+          loadingMore && (
+            <div className="py-8 flex justify-center">
+              <RefreshCcw
+                size={24}
+                className="animate-spin text-purple-600"
+              />
+            </div>
+          )
+        }
       </div>
     </div>
   );

@@ -201,10 +201,9 @@ export default function App() {
 
     return (
       <div className="h-screen bg-white flex items-center justify-center">
-
-        <p className="text-black">
-          Loading...
-        </p>
+        <div className="flex items-center justify-center py-10">
+          <div className="w-12 h-12 border-[5px] border-purple-200 border-t-fuchsia-600 rounded-full animate-spin"></div>
+        </div>
 
       </div>
     );
@@ -259,7 +258,7 @@ export default function App() {
 
   // ============ profile =============
 
-    if (page === "profile") {
+  if (page === "profile") {
 
     return (
       <ProfilePage
@@ -275,11 +274,11 @@ export default function App() {
   }
 
 
-    if (page === "profileModal") {
+  if (page === "profileModal") {
 
     return (
       <ProfileModal
-    onNavigate={setPage}
+        onNavigate={setPage}
       />
     );
   }
