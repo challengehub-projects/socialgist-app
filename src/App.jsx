@@ -263,11 +263,7 @@ export default function App() {
     return (
       <ProfilePage
 
-        post={selectedPost}
-
-        onBack={() =>
-          setPage("feed")
-        }
+        onNavigate={setPage}
 
       />
     );

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Preferences } from "@capacitor/preferences";
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
-import { Share } from "@capacitor/share";
+/* import { Share } from "@capacitor/share"; */
 import { Filesystem, Directory, } from "@capacitor/filesystem";
 import {
   MessageCircle,
@@ -13,12 +13,17 @@ import {
   RefreshCcw,
   ThumbsUp,
   Heart,
+  Share,
+  Send,
   Share2,
   Flame,
   Sparkles,
   Users,
+  CornerUpRight,
+  CornerUpLeftIcon
 } from "lucide-react";
 import { GiConsoleController } from "react-icons/gi";
+import ProfileModal from "./profileModal"
 
 
 export default function Feed({
@@ -41,6 +46,21 @@ export default function Feed({
 
   const [animatingLike, setAnimatingLike] =
     useState(null);
+
+
+
+  const [openProfile, setOpenProfile] =
+    useState(false);
+
+  const [selectedProfile, setSelectedProfile] =
+    useState(null);
+
+
+  const openProfileModal = (post) => {
+    setSelectedProfile(post);
+    setOpenProfile(true);
+  };
+
 
 
   const [page, setPage] = useState(0);
@@ -564,42 +584,6 @@ export default function Feed({
   }, []);
 
   // ================= REALTIME =================
-
-  /*   useEffect(() => {
-      const channel = supabase
-        .channel("realtime-posts")
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "posts",
-          },
-          (payload) => {
-            const updatedPost =
-              payload.new;
-  
-            setPosts((prev) =>
-              prev.map((post) =>
-                post.id === updatedPost.id
-                  ? {
-                    ...post,
-                    likes_count:
-                      updatedPost.likes_count,
-                  }
-                  : post
-              )
-            );
-          }
-        )
-        .subscribe();
-  
-       console.log(channel)
-  
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }, []); */
 
   useEffect(() => {
 
@@ -1176,7 +1160,7 @@ ${post.likes_count || 0} likes
               Share photos,
               thoughts, vibes,
               moments and connect
-              with your people in
+              with people in
               real-time.
             </p>
 
@@ -1248,7 +1232,8 @@ ${post.likes_count || 0} likes
                     className="w-12 h-12 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm"
+                  >
                     {(
                       post.profile_name ||
                       "U"
@@ -1259,9 +1244,21 @@ ${post.likes_count || 0} likes
                 )}
 
                 <div className="flex-1">
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-white">
-                    {post.profile_name ||
-                      "Anonymous"}
+                  <h3 className="font-semibold text-sm text-gray-900 dark:text-white"
+                    onClick={() =>
+                      openProfileModal({
+                        profile_name: "Emzy",
+                        profile_image:
+                          "https://i.pravatar.cc/155?img=12",
+                        bio: "Connect • Vibe • Gist",
+                        posts: posts?.length || 0,
+                      })
+                    }
+                  >
+                    {
+                      post.profile_name ||
+                      "Anonymous"
+                    }
                   </h3>
 
                   <p className="text-xs text-gray-500">
@@ -1274,56 +1271,61 @@ ${post.likes_count || 0} likes
 
               {/* DESCRIPTION */}
 
-              {post.description && (
-                <div className="px-4 pb-4">
-                  <p className="text-[15px] leading-relaxed text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
-                    {
-                      post.description
-                    }
-                  </p>
-                </div>
-              )}
+              {
+                post.description && (
+                  <div className="px-4 pb-4">
+                    <p className="text-[15px] leading-relaxed text-gray-800 dark:text-gray-100 whitespace-pre-wrap">
+                      {
+                        post.description
+                      }
+                    </p>
+                  </div>
+                )
+              }
 
               {/* IMAGE */}
 
-              {post.image && (
-                <div className="relative overflow-hidden bg-black">
-                  <img
-                    src={
-                      post.cached_image ||
-                      post.image
-                    }
-                    alt=""
-                    className="w-full max-h-[700px] object-cover"
-                  />
+              {
+                post.image && (
+                  <div className="relative overflow-hidden bg-black -mx-4">
+                    <img
+                      src={
+                        post.cached_image ||
+                        post.image
+                      }
+                      alt=""
+                      className="w-full max-w-2xl mx-auto sm:p-4"
+                    />
 
-                  {parsed?.layers?.map(
-                    (layer) => (
-                      <div
-                        key={layer.id}
-                        className="absolute font-black"
-                        style={{
-                          left:
-                            layer.x,
-                          top: layer.y,
-                          color:
-                            layer.color,
-                          fontSize:
-                            layer.fontSize,
-                          textShadow:
-                            "0 3px 15px rgba(0,0,0,0.6)",
-                        }}
-                      >
-                        {layer.text}
-                      </div>
-                    )
-                  )}
-                </div>
-              )}
+                    {parsed?.layers?.map(
+                      (layer) => (
+                        <div
+                          key={layer.id}
+                          className="absolute font-black w-full"
+                          style={{
+                            left:
+                              layer.x,
+                            top: layer.y,
+                            color:
+                              layer.color,
+                            fontSize:
+                              layer.fontSize,
+                            textShadow:
+                              "0 3px 15px rgba(0,0,0,0.6)",
+                          }}
+                        >
+                          {layer.text}
+                        </div>
+                      )
+                    )}
+                  </div>
+                )
+              }
 
               {/* TEXT POST */}
 
-              {!post.image &&
+              {
+                !post.image &&
                 parsed?.background && (
                   <div
                     className="relative min-h-[280px] flex items-center justify-center overflow-hidden"
@@ -1356,7 +1358,8 @@ ${post.likes_count || 0} likes
                       )
                     )}
                   </div>
-                )}
+                )
+              }
 
               {/* ACTIONS */}
 
@@ -1440,7 +1443,7 @@ ${post.likes_count || 0} likes
                     />
 
                     <span className="text-sm font-semibold">
-                      Comment
+                      Message
                     </span>
                   </button>
 
@@ -1454,7 +1457,7 @@ ${post.likes_count || 0} likes
                     }
                     className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-purple-500/10 text-purple-600 active:scale-95 transition"
                   >
-                    <Share2 size={20} />
+                    <CornerUpRight size={20} />
 
                     <span className="text-sm font-semibold">
                       Share
@@ -1477,6 +1480,6 @@ ${post.likes_count || 0} likes
           )
         }
       </div>
-    </div>
+    </div >
   );
 }

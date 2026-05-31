@@ -46,6 +46,7 @@ export default function TopNavbar({
   onPostCreated,
 }) {
   const fileRef = useRef();
+  const textRefs = useRef({});
 
   const [showCreateModal, setShowCreateModal] =
     useState(false);
@@ -94,6 +95,7 @@ export default function TopNavbar({
 
 
 
+
   // ================= COLORS =================
 
   const colors = [
@@ -139,6 +141,37 @@ export default function TopNavbar({
       )
       ]
     );
+
+  useEffect(() => {
+    if (
+      showCreateModal &&
+      layers.length === 0
+    ) {
+      addText();
+    }
+  }, [showCreateModal]);
+
+
+  useEffect(() => {
+    if (!selected) return;
+
+    const el = textRefs.current[selected];
+
+    if (!el || typeof el.focus !== "function") return;
+
+    el.focus();
+
+    requestAnimationFrame(() => {
+      const range = document.createRange();
+      const sel = window.getSelection();
+
+      range.selectNodeContents(el);
+      range.collapse(false);
+
+      sel.removeAllRanges();
+      sel.addRange(range);
+    });
+  }, [selected]);
 
   // ================= NETWORK =================
 
@@ -272,57 +305,130 @@ export default function TopNavbar({
 
   // ================= IMAGE UPLOAD =================
 
+  const compressImage = (file) =>
+    new Promise((resolve) => {
+      const img = new Image();
+
+      img.onload = () => {
+        const canvas =
+          document.createElement("canvas");
+
+        const MAX_WIDTH = 1080;
+
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height =
+            (height * MAX_WIDTH) /
+            width;
+
+          width = MAX_WIDTH;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx =
+          canvas.getContext("2d");
+
+        ctx.drawImage(
+          img,
+          0,
+          0,
+          width,
+          height
+        );
+
+        canvas.toBlob(
+          (blob) => {
+            resolve(
+              new File(
+                [blob],
+                file.name,
+                {
+                  type:
+                    "image/jpeg",
+                }
+              )
+            );
+          },
+          "image/jpeg",
+          0.45
+        );
+      };
+
+      img.src =
+        URL.createObjectURL(file);
+    });
 
   const uploadImage = async (e) => {
-
     const file =
       e.target.files?.[0];
 
     if (!file) return;
 
-    // SAVE REAL FILE
-    setImageFile(file);
+    const compressed =
+      await compressImage(file);
 
-    // PREVIEW IMAGE
-    const preview =
-      URL.createObjectURL(file);
+    setImageFile(compressed);
 
-    setImage(preview);
+    setImage(
+      URL.createObjectURL(
+        compressed
+      )
+    );
+
+    console.log(
+      "Original:",
+      (
+        file.size /
+        1024 /
+        1024
+      ).toFixed(2),
+      "MB"
+    );
+
+    console.log(
+      "Compressed:",
+      (
+        compressed.size /
+        1024
+      ).toFixed(0),
+      "KB"
+    );
   };
 
   // ================= ADD TEXT =================
 
   const addText = () => {
-    const randomColor =
-      colors[
-      Math.floor(
-        Math.random() *
-        colors.length
-      )
-      ];
-
     const id = Date.now();
 
     setLayers((prev) => [
       ...prev,
       {
         id,
-
         type: "text",
-
-        text: "Tap to edit",
-
-        x: 90,
-
-        y: 220,
-
-        color: randomColor,
-
-        fontSize: 34,
+        text: "",
+        x: 0,
+        y: 0,
+        color: "#ffffff",
+        fontSize: 40,
+        width: window.innerWidth - 40,
       },
     ]);
 
     setSelected(id);
+
+    setTimeout(() => {
+      const el = document.querySelector(
+        `[data-text-id="${id}"]`
+      );
+
+      if (el) {
+        el.focus();
+      }
+    }, 100);
   };
 
   // ================= UPDATE LAYER =================
@@ -828,7 +934,7 @@ export default function TopNavbar({
       {/* ================= CREATE MODAL ================= */}
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-[999] bg-black flex flex-col overflow-hidden touch-none">
+        <div className="fixed inset-0 z-[999] bg-black flex flex-col overflow-hidden">
 
           {/* TOP */}
 
@@ -900,8 +1006,17 @@ export default function TopNavbar({
 
           {/* CANVAS */}
 
-          <div className="flex-1 relative overflow-hidden">
-
+          <div
+            className="flex-1 relative overflow-hidden"
+            onClick={(e) => {
+              if (
+                e.target === e.currentTarget &&
+                layers.length === 0
+              ) {
+                addText();
+              }
+            }}
+          >
             {/* BG */}
 
             <div
@@ -921,42 +1036,17 @@ export default function TopNavbar({
               />
             )}
 
-            {/* OVERLAY */}
+            {/* IMAGE OVERLAY */}
 
             {image && (
               <div className="absolute inset-0 bg-black/20" />
             )}
 
-            {/* EMPTY STATE */}
-
-            {!image &&
-              layers.length === 0 && (
-                <div className="absolute inset-0 flex items-center justify-center">
-
-                  <div className="text-center text-white/70 px-6">
-
-                    <ImageIcon
-                      size={60}
-                      className="mx-auto mb-4"
-                    />
-
-                    <h2 className="text-2xl font-black mb-2">
-                      Create something beautiful
-                    </h2>
-
-                    <p className="text-sm opacity-80">
-                      Add photos, text, emojis and captions
-                    </p>
-
-                  </div>
-
-                </div>
-              )}
-
-            {/* LAYERS */}
+            {/* TEXT LAYERS */}
 
             {layers.map((layer) => (
               <Rnd
+                ref={(el) => (textRefs.current[layer.id] = el)}
                 key={layer.id}
                 bounds="parent"
                 enableResizing={false}
@@ -965,95 +1055,58 @@ export default function TopNavbar({
                   y: layer.y,
                 }}
                 onDragStop={(e, d) => {
-                  updateLayer(
-                    layer.id,
-                    {
-                      x: d.x,
-                      y: d.y,
-                    }
-                  );
+                  updateLayer(layer.id, {
+                    x: d.x,
+                    y: d.y,
+                  });
                 }}
                 onClick={() =>
-                  setSelected(
-                    layer.id
-                  )
+                  setSelected(layer.id)
                 }
               >
-
                 <div
-                  className={`font-black select-none transition ${selected ===
-                    layer.id
-                    ? "scale-105"
-                    : ""
-                    }`}
+                  contentEditable
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  data-text-id={layer.id}
+                  onClick={(e) => {
+                    setSelected(layer.id);
+                    e.currentTarget.focus();
+                  }}
+                  onBlur={(e) => {
+                    updateLayer(layer.id, {
+                      text: e.currentTarget.innerText,
+                    });
+                  }}
                   style={{
-                    fontSize:
-                      layer.fontSize,
-
-                    color:
-                      layer.color,
-
-                    textShadow:
-                      "0 4px 20px rgba(0,0,0,0.55)",
+                    width: layer.width,
+                    minHeight: 50,
+                    color: layer.color,
+                    fontSize: layer.fontSize,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    overflowWrap: "break-word",
+                    outline: "none",
+                    caretColor: "#fff",
+                    lineHeight: 2,
                   }}
                 >
                   {layer.text}
                 </div>
-
               </Rnd>
             ))}
-
-            {/* TEXT EDITOR */}
-
-            {selectedLayer && (
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-28 w-[92%] max-w-md z-40">
-
-                <div className="bg-black/60 backdrop-blur-2xl rounded-3xl p-3 border border-white/10 shadow-2xl">
-
-                  <input
-                    value={
-                      selectedLayer.text
-                    }
-                    onChange={(e) =>
-                      updateLayer(
-                        selectedLayer.id,
-                        {
-                          text:
-                            e.target
-                              .value,
-                        }
-                      )
-                    }
-                    placeholder="Edit text..."
-                    className="w-full bg-transparent text-white outline-none text-lg placeholder:text-gray-400"
-                  />
-
-                </div>
-
-              </div>
-            )}
 
             {/* EMOJI PICKER */}
 
             {showEmoji && (
-              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 scale-[0.88] sm:scale-100">
-
-                <div className="overflow-hidden rounded-2xl shadow-2xl">
-
-                  <EmojiPicker
-                    theme="dark"
-                    onEmojiClick={
-                      addEmoji
-                    }
-                  />
-
-                </div>
-
+              <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50">
+                <EmojiPicker
+                  theme="dark"
+                  onEmojiClick={addEmoji}
+                />
               </div>
             )}
-
           </div>
-
           {/* TOOLBAR */}
 
           <div className="h-24 bg-[#0f0f10]/95 backdrop-blur-2xl border-t border-white/10 flex items-center justify-around px-4 pb-3 overflow-x-auto">
@@ -1061,7 +1114,23 @@ export default function TopNavbar({
             {/* TEXT */}
 
             <button
-              onClick={addText}
+              onClick={() => {
+                if (layers.length === 0) {
+                  addText();
+                } else {
+                  const lastLayer =
+                    layers[layers.length - 1];
+
+                  setSelected(lastLayer.id);
+
+                  const el =
+                    document.querySelector(
+                      `[data-text-id="${lastLayer.id}"]`
+                    );
+
+                  el?.focus();
+                }
+              }}
               className="flex flex-col items-center text-white shrink-0"
             >
 
@@ -1216,37 +1285,38 @@ export default function TopNavbar({
 
           </div>
 
-        </div>
-      )}
+        </div >
+      )
+      }
 
     </>
   );
+
+
+  /* ================= NAV BUTTON ================= */
+
+  function NavButton({
+    icon,
+    label,
+    active,
+  }) {
+    return (
+      <button
+        className={`flex flex-col items-center justify-center h-14 min-w-[90px] px-4 rounded-2xl transition ${active
+          ? "text-purple-600"
+          : "text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3B3C]"
+          }`}
+      >
+
+        <div className="h-6 w-6 flex items-center justify-center">
+          {icon}
+        </div>
+
+        <span className="text-xs mt-1">
+          {label}
+        </span>
+
+      </button>
+    );
+  }
 }
-
-/* ================= NAV BUTTON ================= */
-
-function NavButton({
-  icon,
-  label,
-  active,
-}) {
-  return (
-    <button
-      className={`flex flex-col items-center justify-center h-14 min-w-[90px] px-4 rounded-2xl transition ${active
-        ? "text-purple-600"
-        : "text-gray-500 hover:bg-gray-100 dark:hover:bg-[#3A3B3C]"
-        }`}
-    >
-
-      <div className="h-6 w-6 flex items-center justify-center">
-        {icon}
-      </div>
-
-      <span className="text-xs mt-1">
-        {label}
-      </span>
-
-    </button>
-  );
-}
-
