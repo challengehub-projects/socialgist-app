@@ -18,7 +18,7 @@ import SignupPage from "./pages/signup";
 import HomeFeedPage from "./pages/feed";
 import TopNavbar from "./pages/navbar";
 
-import Messages from "./pages/messeges";
+import Messages from "./pages/messages";
 import ProfilePage from "./pages/profile";
 import ProfileModal from "./pages/profileModal";
 
@@ -41,6 +41,8 @@ export default function App() {
   // COMMENT CHAT DATA
   const [selectedPost, setSelectedPost] =
     useState(null);
+
+
 
   // ================= SPLASH =================
 
@@ -161,9 +163,9 @@ export default function App() {
 
   }, []);
 
-  // ================= OPEN COMMENTS =================
+  // ================= OPEN MESSAGES =================
 
-  const openComments = (post) => {
+  const openMessages = (post) => {
 
     setSelectedPost(post);
 
@@ -240,20 +242,28 @@ export default function App() {
 
   // ================= MESSAGES =================
 
-  if (page === "messages") {
+    if (page === "messages") {
 
     return (
       <Messages
-
         post={selectedPost}
-
         onBack={() =>
           setPage("feed")
         }
-
       />
     );
   }
+
+ /*  {
+    page === "messages" && (
+      <Messages
+        post={selectedPost}
+        onBack={() =>
+          setPage("feed")
+        }
+      />
+    )
+  } */
 
 
   // ============ profile =============
@@ -290,8 +300,8 @@ export default function App() {
 
       <HomeFeedPage
 
-        onOpenComments={
-          openComments
+        onOpenMessages={
+          openMessages
         }
 
       />

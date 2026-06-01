@@ -528,9 +528,9 @@ export default function TopNavbar({
       !description.trim()
     ) {
 
-      alert(
-        "Create something before posting"
-      );
+      await showToast(
+                "Create something to post!"
+              );
 
       return;
     }
@@ -544,7 +544,9 @@ export default function TopNavbar({
 
       if (!userData?.user) {
 
-        alert("Please login first");
+        await showToast(
+                "Connect to the internet!"
+              );
 
         setLoading(false);
 

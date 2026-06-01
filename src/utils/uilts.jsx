@@ -1,7 +1,12 @@
 import { supabase } from "../configs/supbase";
 
-export const getOrCreateConversation = async (meId, otherUserId) => {
-  if (!meId || !otherUserId) return null;
+export const getOrCreateConversation = async (
+  meId,
+  otherUserId
+) => {
+  if (!meId || !otherUserId) {
+    return null;
+  }
 
   const [a, b] =
     meId < otherUserId
@@ -10,63 +15,111 @@ export const getOrCreateConversation = async (meId, otherUserId) => {
 
   const chatKey = `${a}_${b}`;
 
-  /* 1. FIND EXISTING CONVERSATION */
-  const { data: existing, error: findError } = await supabase
+  // FIND EXISTING
+
+  const {
+    data: existing,
+    error: findError,
+  } = await supabase
     .from("conversations")
-    .select("id")
+    .select("*")
     .eq("chat_key", chatKey)
     .maybeSingle();
 
   if (findError) {
-    console.log("findError:", findError);
+    console.log(findError);
     return null;
   }
 
-  let conversationId = existing?.id;
+  let conversation =
+    existing;
 
-  /* 2. CREATE IF NOT EXISTS */
-  if (!conversationId) {
-    const { data: convo, error: insertError } = await supabase
+  // CREATE IF MISSING
+
+  if (!conversation) {
+    const {
+      data: created,
+      error: createError,
+    } = await supabase
       .from("conversations")
       .insert({
         chat_key: chatKey,
       })
-      .select("id")
+      .select()
       .single();
 
-    if (insertError) {
-      console.log("insertError:", insertError);
+    if (createError) {
+      console.log(createError);
       return null;
     }
 
-    conversationId = convo.id;
+    conversation =
+      created;
   }
 
-  /* 3. ENSURE MEMBERS EXIST (SAFE UPSERT) */
-  const { error: memberError } = await supabase
-    .from("conversation_members")
+  // ENSURE MEMBERS EXIST
+
+  const {
+    error: memberError,
+  } = await supabase
+    .from(
+      "conversation_members"
+    )
     .upsert(
       [
         {
-          conversation_id: conversationId,
+          conversation_id:
+            conversation.id,
           user_id: a,
         },
         {
-          conversation_id: conversationId,
+          conversation_id:
+            conversation.id,
           user_id: b,
         },
       ],
       {
-        onConflict: "conversation_id,user_id",
+        onConflict:
+          "conversation_id,user_id",
       }
     );
 
   if (memberError) {
-    console.log("memberError:", memberError);
+    console.log(
+      memberError
+    );
   }
 
-  /* 4. ALWAYS RETURN SAME FORMAT */
+  // GET LAST MESSAGE
+
+  const {
+    data: lastMessage,
+  } = await supabase
+    .from("messages")
+    .select("*")
+    .eq(
+      "conversation_id",
+      conversation.id
+    )
+    .order(
+      "created_at",
+      {
+        ascending: false,
+      }
+    )
+    .limit(1)
+    .maybeSingle();
+
   return {
-    conversationId,
+    conversationId:
+      conversation.id,
+
+    chatKey,
+
+    exists:
+      !!existing,
+
+    lastMessage:
+      lastMessage || null,
   };
 };

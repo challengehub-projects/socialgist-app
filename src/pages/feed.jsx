@@ -27,7 +27,7 @@ import ProfileModal from "./profileModal"
 
 
 export default function Feed({
-  onOpenComments,
+  onOpenMessages,
 }) {
   const [posts, setPosts] =
     useState([]);
@@ -79,6 +79,10 @@ export default function Feed({
       position: "bottom",
     });
   };
+
+
+
+
 
   // ================= IMAGE CACHE =================
 
@@ -1213,8 +1217,6 @@ ${post.likes_count || 0} likes
 
 
 
-          console.log(post)
-
           return (
             <div
               key={post.id}
@@ -1321,46 +1323,57 @@ ${post.likes_count || 0} likes
                   </div>
                 )
               }
-
-              {/* TEXT POST */}
-
               {
                 !post.image &&
                 parsed?.background && (
                   <div
-                    className="relative min-h-[280px] flex items-center justify-center overflow-hidden"
+                    className="relative min-h-[280px] flex items-center justify-center overflow-hidden p-8"
                     style={{
-                      background:
-                        parsed.background,
+                      background: parsed.background,
                     }}
                   >
-                    {parsed?.layers?.map(
-                      (layer) => (
-                        <div
-                          key={
-                            layer.id
-                          }
-                          className="absolute font-black"
-                          style={{
-                            left:
-                              layer.x,
-                            top: layer.y,
-                            color:
-                              layer.color,
-                            fontSize:
-                              layer.fontSize,
-                            textShadow:
-                              "0 3px 15px rgba(0,0,0,0.6)",
-                          }}
-                        >
-                          {layer.text}
-                        </div>
+                    {parsed?.text ? (
+                      <div
+                        className="
+            text-white
+            text-center
+            font-black
+            text-3xl
+            sm:text-4xl
+            whitespace-pre-wrap
+            break-words
+            w-full
+          "
+                        style={{
+                          textShadow:
+                            "0 3px 15px rgba(0,0,0,0.6)",
+                        }}
+                      >
+                        {parsed.text}
+                      </div>
+                    ) : (
+                      parsed?.layers?.map(
+                        (layer) => (
+                          <div
+                            key={layer.id}
+                            className="absolute font-black"
+                            style={{
+                              left: layer.x,
+                              top: layer.y,
+                              color: layer.color,
+                              fontSize: layer.fontSize,
+                              textShadow:
+                                "0 3px 15px rgba(0,0,0,0.6)",
+                            }}
+                          >
+                            {layer.text}
+                          </div>
+                        )
                       )
                     )}
                   </div>
                 )
               }
-
               {/* ACTIONS */}
 
               <div className="px-4 py-3">
@@ -1428,11 +1441,11 @@ ${post.likes_count || 0} likes
                     </span>
                   </button>
 
-                  {/* COMMENT */}
+                  {/* MESSAGE */}
 
                   <button
                     onClick={() =>
-                      onOpenComments(
+                      onOpenMessages(
                         post
                       )
                     }
