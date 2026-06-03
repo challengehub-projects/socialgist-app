@@ -24,11 +24,15 @@ import {
 } from "lucide-react";
 import { GiConsoleController } from "react-icons/gi";
 import ProfileModal from "./profileModal"
+import { sendNotification } from "../utils/sendNotifications";
 
 
 export default function Feed({
   onOpenMessages,
 }) {
+  const [me, setMe] =
+    useState(null);
+
   const [posts, setPosts] =
     useState([]);
 
@@ -461,6 +465,16 @@ export default function Feed({
     showLoader = false
   ) => {
     try {
+      const { datas, errorlogs } =
+        await supabase
+          .from("notifications")
+          .insert({
+            title: "Test",
+            body: "Hello World",
+            user_id: me.id,
+          });
+
+      console.log(datas, errorlogs);
       if (showLoader) {
         setLoading(true);
       }
@@ -572,6 +586,24 @@ export default function Feed({
     setLoading(false);
   };
 
+  useEffect(() => {
+
+    const getUser =
+      async () => {
+
+        const { data } =
+          await supabase.auth.getUser();
+
+        setMe(
+          data?.user || null
+        );
+
+      };
+
+    getUser();
+
+  }, []);
+
   // ================= START =================
 
   useEffect(() => {
@@ -591,129 +623,58 @@ export default function Feed({
 
   useEffect(() => {
 
-    // Create a realtime channel.
-    // The name "feed-realtime" is just an identifier.
-    // It can be any string.
     const channel = supabase
-
 
       .channel("feed-realtime")
 
-      // Listen for PostgreSQL changes
       .on(
         "postgres_changes",
 
         {
-          // Listen to ALL database events
-          // INSERT = new row
-          // UPDATE = existing row changed
-          // DELETE = row removed
           event: "*",
-
-          // Database schema
           schema: "public",
-
-          // Table to watch
           table: "posts",
         },
 
-        // This callback runs every time
-        // something changes in the posts table
         async (payload) => {
 
           console.log(
-            "🔥 REALTIME PAYLOAD:",
+            "🔥 FEED UPDATE:",
             payload
           );
 
-          /*
-            Example payload for UPDATE:
-      
-            {
-              eventType: "UPDATE",
-      
-              old: {
-                id: "123",
-                likes_count: 5
-              },
-      
-              new: {
-                id: "123",
-                likes_count: 6
-              }
-            }
-          */
-
-          // ====================================
-          // INSERT
-          // ====================================
+          // =========================
+          // IGNORE NEW POSTS
+          // =========================
 
           if (
             payload.eventType ===
             "INSERT"
           ) {
 
-            console.log(
-              "➕ NEW POST:",
-              payload.new
-            );
-
-            // Add new post to top of feed
-
-            setPosts((prev) => [
-
-              payload.new,
-
-              ...prev,
-
-            ]);
-
             return;
+
           }
 
-          // ====================================
-          // UPDATE
-          // ====================================
+          // =========================
+          // POST UPDATED
+          // =========================
 
           if (
             payload.eventType ===
             "UPDATE"
           ) {
 
-            console.log(
-              "✏️ POST UPDATED:",
-              payload.new
-            );
-
-            /*
-              Example:
-      
-              Before:
-              likes_count = 5
-      
-              Another user likes:
-      
-              After:
-              likes_count = 6
-            */
-
             setPosts((prev) =>
 
               prev.map((post) =>
-
-                // Find the post that changed
 
                 post.id ===
                   payload.new.id
 
                   ? {
 
-                    // Keep old data
-
                     ...post,
-
-                    // Replace with latest
-                    // values from database
 
                     ...payload.new,
 
@@ -725,22 +686,99 @@ export default function Feed({
 
             );
 
+            // =========================
+            // LIKE NOTIFICATION
+            // =========================
+
+            const oldLikes =
+              payload.old
+                ?.likes_count || 0;
+
+            const newLikes =
+              payload.new
+                ?.likes_count || 0;
+
+            
+                console.log(payload.new.user_id, me?.id)
+
+              /*                 payload.new.user_id ===
+              me?.id */
+           
+
+            if (
+
+              newLikes > oldLikes 
+
+
+
+            ) {
+
+              await sendNotification({
+
+                title:
+                  "❤️ New Like",
+
+                body:
+                  "Someone liked your post",
+
+              });
+
+              console.log("SOMEONE LIKED YOUR POST");
+
+            }
+
+            else {
+              console.log("LIKE COUNT CHANGED:", {
+                old: oldLikes,
+                new: newLikes
+              });
+            }
+
+            // =========================
+            // SHARE NOTIFICATION
+            // =========================
+
+            const oldShares =
+              payload.old
+                ?.shares_count || 0;
+
+            const newShares =
+              payload.new
+                ?.shares_count || 0;
+
+            if (
+
+              newShares > oldShares &&
+
+              payload.new.user_id ===
+              me?.id
+
+            ) {
+
+              await sendNotification({
+
+                title:
+                  "📤 New Share",
+
+                body:
+                  "Someone shared your post",
+
+              });
+
+            }
+
             return;
+
           }
 
-          // ====================================
-          // DELETE
-          // ====================================
+          // =========================
+          // DELETE POST
+          // =========================
 
           if (
             payload.eventType ===
             "DELETE"
           ) {
-
-            console.log(
-              "🗑️ POST DELETED:",
-              payload.old
-            );
 
             setPosts((prev) =>
 
@@ -754,37 +792,22 @@ export default function Feed({
               )
 
             );
+
           }
+
         }
       )
 
-      // Subscribe to channel
       .subscribe((status) => {
 
         console.log(
-          "📡 CHANNEL STATUS:",
+          "📡 Feed Status:",
           status
         );
 
-        /*
-          Possible values:
-      
-          SUBSCRIBED
-          CHANNEL_ERROR
-          TIMED_OUT
-          CLOSED
-        */
       });
 
-
-    // Cleanup when component unmounts
-
     return () => {
-
-
-      console.log(
-        "❌ REMOVING CHANNEL"
-      );
 
       supabase.removeChannel(
         channel
@@ -792,11 +815,7 @@ export default function Feed({
 
     };
 
-  }, []);
-
-
-
-  // ================= NETWORK =================
+  }, [me?.id]);
 
   // ================= NETWORK =================
 
@@ -922,6 +941,18 @@ export default function Feed({
         }
 
         return post;
+      });
+
+      // BROWSER NOTIFICATION
+
+      await sendNotification({
+
+        title:
+          "Message",
+
+        body:
+          "You Liked a post!",
+
       });
 
       setPosts(updatedPosts);

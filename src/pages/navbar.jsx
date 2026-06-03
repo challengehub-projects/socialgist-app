@@ -26,7 +26,15 @@ import {
   Wifi,
   WifiOff,
   Loader2,
+  User,
+  Settings,
+  RefreshCcw,
+  LogOut,
 } from "lucide-react";
+
+/* import {
+  getUnreadMessagesCount,
+} from "../pages/messages"; */
 
 import { Rnd } from "react-rnd";
 import EmojiPicker from "emoji-picker-react";
@@ -39,6 +47,8 @@ import { Network } from "@capacitor/network";
 import ProfileModal from "./profileModal";
 
 
+
+
 export default function TopNavbar({
   darkMode,
   toggleDarkMode,
@@ -46,6 +56,11 @@ export default function TopNavbar({
   onPostCreated,
   onOpenMessages,
 }) {
+
+  const [showProfileMenu,
+    setShowProfileMenu] =
+    useState(false);
+
   const fileRef = useRef();
   const textRefs = useRef({});
 
@@ -144,6 +159,30 @@ export default function TopNavbar({
       )
       ]
     );
+
+  useEffect(() => {
+
+    const closeMenu = () => {
+
+      setShowProfileMenu(
+        false
+      );
+
+    };
+
+    window.addEventListener(
+      "click",
+      closeMenu
+    );
+
+    return () =>
+
+      window.removeEventListener(
+        "click",
+        closeMenu
+      );
+
+  }, []);
 
   useEffect(() => {
     if (
@@ -532,8 +571,8 @@ export default function TopNavbar({
     ) {
 
       await showToast(
-                "Create something to post!"
-              );
+        "Create something to post!"
+      );
 
       return;
     }
@@ -548,8 +587,8 @@ export default function TopNavbar({
       if (!userData?.user) {
 
         await showToast(
-                "Connect to the internet!"
-              );
+          "Connect to the internet!"
+        );
 
         setLoading(false);
 
@@ -712,6 +751,16 @@ export default function TopNavbar({
     setLoading(false);
   };
 
+  /*   async function countUnreadMessages() {
+      const { data } =
+        await supabase.auth.getUser();
+      console.log(data);
+      const count = await getUnreadMessagesCount(me.id);
+      console.log(count);
+    }
+  
+    countUnreadMessages(); */
+
   return (
     <>
       <ProfileModal
@@ -771,17 +820,15 @@ export default function TopNavbar({
 
           <div
             className="relative cursor-pointer"
-            onClick={() =>
-              openProfileModal({
-                profile_name: "Great Ubamara",
-                profile_image:
-                  "https://i.pravatar.cc/150?img=12",
-                bio: "Connect • Vibe • Gist",
-                followers: "12.4K",
-                following: "1.1K",
-                posts: posts?.length || 0,
-              })
-            }
+            onClick={(e) => {
+
+              e.stopPropagation();
+
+              setShowProfileMenu(
+                (prev) => !prev
+              );
+
+            }}
           >
 
             <img
@@ -793,6 +840,7 @@ export default function TopNavbar({
             <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 border-2 border-white rounded-full animate-pulse" />
 
           </div>
+
           {/* DESKTOP NAV */}
 
           <div className="hidden lg:flex items-center gap-2 flex-1 justify-center">
@@ -913,7 +961,7 @@ export default function TopNavbar({
               />
 
               <span className={badge}>
-                4
+                { }
               </span>
 
             </button>
@@ -937,6 +985,139 @@ export default function TopNavbar({
         </div>
 
       </header>
+
+      {
+        showProfileMenu && (
+
+          <div
+            onClick={(e) =>
+              e.stopPropagation()
+            }
+            className="absolute top-16 left-4 w-72 rounded-3xl bg-white dark:bg-[#18191a] shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden z-[99999]"
+          >
+
+            {/* PROFILE */}
+
+            <button
+              onClick={() => {
+
+                setShowProfileMenu(
+                  false
+                );
+
+                onNavigate?.(
+                  "profile"
+                );
+
+              }}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition"
+            >
+
+              <div className="h-11 w-11 rounded-full bg-purple-600 flex items-center justify-center text-white">
+
+                <User size={20} />
+
+              </div>
+
+              <div className="text-left">
+
+                <p className="font-bold dark:text-white">
+
+                  Profile
+
+                </p>
+
+                <p className="text-xs text-gray-500">
+
+                  View your profile
+
+                </p>
+
+              </div>
+
+            </button>
+
+            {/* SETTINGS */}
+
+            <button
+              onClick={() => {
+
+                setShowProfileMenu(
+                  false
+                );
+
+                onNavigate?.(
+                  "settings"
+                );
+
+              }}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition dark:text-white"
+            >
+
+              <Settings
+                size={20}
+              />
+
+              <span>
+                Settings
+              </span>
+
+            </button>
+
+            {/* SWITCH ACCOUNT */}
+
+            <button
+              onClick={() => {
+
+                setShowProfileMenu(
+                  false
+                );
+
+                onNavigate?.(
+                  "switch-account"
+                );
+
+              }}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition dark:text-white"
+            >
+
+              <RefreshCcw
+                size={20}
+              />
+
+              <span>
+                Switch Account
+              </span>
+
+            </button>
+
+            {/* LOGOUT */}
+
+            <button
+              onClick={async () => {
+
+                await supabase.auth.signOut();
+
+                window.location.reload();
+
+              }}
+              className="w-full flex items-center gap-4 px-5 py-4 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition"
+            >
+
+              <LogOut
+                size={20}
+              />
+
+              <span>
+                Logout
+              </span>
+
+            </button>
+
+          </div>
+
+        )
+      }
 
       {/* ================= CREATE MODAL ================= */}
 

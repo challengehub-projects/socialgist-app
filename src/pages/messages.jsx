@@ -25,6 +25,8 @@ export default function Messages({
   post,
 }) {
 
+
+
   const messagesEndRef =
     useRef(null);
 
@@ -58,6 +60,7 @@ export default function Messages({
   const [typingUsers, setTypingUsers] =
     useState([]);
 
+
   // ================= SCROLL =================
 
   const scrollToBottom = () => {
@@ -67,6 +70,54 @@ export default function Messages({
     });
 
   };
+
+  useEffect(() => {
+
+    if (!me?.id) return;
+
+    const channel = supabase
+      .channel(`incoming-${me.id}`)
+
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+
+        async (payload) => {
+
+          if (
+            payload.new.sender_id ===
+            me.id
+          ) {
+            return;
+          }
+
+          await sendNotification({
+
+            title: "New Message",
+
+            body:
+              payload.new.content,
+
+          });
+
+        }
+      );
+
+    channel.subscribe();
+
+    return () => {
+
+      supabase.removeChannel(
+        channel
+      );
+
+    };
+
+  }, [me]);
 
   useEffect(() => {
 
@@ -94,7 +145,102 @@ export default function Messages({
 
   useEffect(() => {
 
+    if (!me?.id) return;
+
+    const channel = supabase
+
+      .channel(`notifications-${me.id}`)
+
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+        },
+
+        async (payload) => {
+
+          const message =
+            payload.new;
+
+          if (
+            message.sender_id ===
+            me.id
+          ) {
+            return;
+          }
+
+          // CHAT OPEN?
+
+          if (
+            activeChat?.conversation_id ===
+            message.conversation_id
+          ) {
+
+            setMessages((prev) => {
+
+              const exists =
+                prev.some(
+                  (m) =>
+                    m.id ===
+                    message.id
+                );
+
+              if (exists)
+                return prev;
+
+              return [
+                ...prev,
+                message,
+              ];
+
+            });
+
+            return;
+          }
+
+
+
+          // BROWSER NOTIFICATION
+
+          await sendNotification({
+
+            title:
+              "New Message",
+
+            body:
+              message.content,
+
+          });
+
+          // REFRESH CHAT LIST
+
+          loadChats(me.id);
+
+        }
+      );
+
+    channel.subscribe();
+
+    return () => {
+
+      supabase.removeChannel(
+        channel
+      );
+
+    };
+
+  }, [
+    me,
+    activeChat,
+  ]);
+
+  useEffect(() => {
+
     const startChat = async () => {
+
+      console.log("Starting chat with post", post);
 
       if (
         !me?.id ||
@@ -162,6 +308,59 @@ export default function Messages({
 
   };
 
+  // utils/getUnreadMessagesCount.js
+2
+
+ /*  export default async function getUnreadMessagesCount(userId) {
+
+    if (!userId) return 0;
+
+    const {
+      data: conversations, error,
+    } = await supabase
+      .from("conversation_members")
+      .select("conversation_id")
+      .eq("user_id", userId);
+
+    if (error) {
+
+      console.log(error);
+
+      return 0;
+
+    }
+
+    let totalUnread = 0;
+
+    for (const chat of conversations || []) {
+
+      const { count } = await supabase
+        .from("messages")
+        .select("*", {
+          count: "exact",
+          head: true,
+        })
+        .eq(
+          "conversation_id",
+          chat.conversation_id
+        )
+        .neq(
+          "sender_id",
+          userId
+        )
+        .eq(
+          "is_read",
+          false
+        );
+
+      totalUnread +=
+        count || 0;
+
+    }
+
+    return totalUnread;
+
+  } */
   // ================= TIME =================
 
   const formatTime = (date) => {
@@ -180,98 +379,145 @@ export default function Messages({
   // ================= LOAD CHATS =================
 
   const loadChats = async (userId) => {
-    const { data, error } = await supabase
-      .from("conversation_members")
-      .select(`
-      conversation_id
-    `)
-      .eq("user_id", userId);
+
+    const { data, error } =
+      await supabase
+        .from("conversation_members")
+        .select("conversation_id")
+        .eq("user_id", userId);
 
     if (error) {
+
       console.log(error);
+
       return;
+
     }
 
-    const formatted = await Promise.all(
-      (data || []).map(async (item) => {
+    const formatted =
+      await Promise.all(
 
-        const conversationId =
-          item.conversation_id;
+        (data || []).map(
+          async (item) => {
 
-        // FIND OTHER MEMBER
-        const { data: members } =
-          await supabase
-            .from("conversation_members")
-            .select("user_id")
-            .eq(
-              "conversation_id",
-              conversationId
-            );
+            const conversationId =
+              item.conversation_id;
 
-        const otherMember =
-          members?.find(
-            (m) => m.user_id !== userId
-          );
+            // UNREAD COUNT
 
-        if (!otherMember) return null;
+            const { count } =
+              await supabase
+                .from("messages")
+                .select("*", {
+                  count: "exact",
+                  head: true,
+                })
+                .eq(
+                  "conversation_id",
+                  conversationId
+                )
+                .neq(
+                  "sender_id",
+                  userId
+                )
+                .eq(
+                  "is_read",
+                  false
+                );
 
-        // GET USER PROFILE
-        const { data: profile } =
-          await supabase
-            .from("profiles")
-            .select(`
-            id,
-            full_name,
-            avatar_url
-          `)
-            .eq(
-              "id",
-              otherMember.user_id
-            )
-            .maybeSingle();
+            // FIND OTHER MEMBER
 
-        // LAST MESSAGE
-        const { data: lastMsg } =
-          await supabase
-            .from("messages")
-            .select("*")
-            .eq(
-              "conversation_id",
-              conversationId
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              }
-            )
-            .limit(1)
-            .maybeSingle();
+            const {
+              data: members,
+            } = await supabase
+              .from(
+                "conversation_members"
+              )
+              .select("user_id")
+              .eq(
+                "conversation_id",
+                conversationId
+              );
 
-        return {
-          conversation_id:
-            conversationId,
+            const otherMember =
+              members?.find(
+                (m) =>
+                  m.user_id !==
+                  userId
+              );
 
-          user_id:
-            profile?.id,
+            if (!otherMember)
+              return null;
 
-          name:
-            profile?.full_name ||
-            "Unknown User",
+            // PROFILE
 
-          avatar:
-            profile?.avatar_url,
+            const {
+              data: profile,
+            } = await supabase
+              .from("profiles")
+              .select(`
+              id,
+              full_name,
+              avatar_url
+            `)
+              .eq(
+                "id",
+                otherMember.user_id
+              )
+              .maybeSingle();
 
-          lastMessage:
-            lastMsg?.content ||
-            "Start chatting",
-        };
-      })
-    );
+            // LAST MESSAGE
+
+            const {
+              data: lastMsg,
+            } = await supabase
+              .from("messages")
+              .select("*")
+              .eq(
+                "conversation_id",
+                conversationId
+              )
+              .order(
+                "created_at",
+                {
+                  ascending: false,
+                }
+              )
+              .limit(1)
+              .maybeSingle();
+
+            return {
+
+              conversation_id:
+                conversationId,
+
+              user_id:
+                profile?.id,
+
+              name:
+                profile?.full_name ||
+                "Unknown User",
+
+              avatar:
+                profile?.avatar_url,
+
+              lastMessage:
+                lastMsg?.content ||
+                "Start chatting",
+
+              unreadCount:
+                count || 0,
+
+            };
+
+          }
+        )
+      );
 
     setChats(
       formatted.filter(Boolean)
     );
+
   };
 
   // ================= LOAD MESSAGES =================
@@ -333,9 +579,34 @@ export default function Messages({
 
     setMobileChatOpen(true);
 
+    // MARK ALL RECEIVED
+    // MESSAGES AS READ
+
+    await supabase
+      .from("messages")
+      .update({
+        is_read: true,
+      })
+      .eq(
+        "conversation_id",
+        chat.conversation_id
+      )
+      .neq(
+        "sender_id",
+        me.id
+      );
+
+    // REFRESH SIDEBAR
+
+    await loadChats(
+      me.id
+    );
+
     await loadMessages(
       chat.conversation_id
     );
+
+    // REMOVE OLD CHANNEL
 
     if (channelRef.current) {
 
@@ -350,7 +621,7 @@ export default function Messages({
 
     const channel =
       supabase.channel(
-        `chat-${chat.conversation_id}`
+        `chat-${chat.conversation_id}-${Date.now()}`
       );
 
     channel.on(
@@ -361,73 +632,80 @@ export default function Messages({
         table: "messages",
         filter: `conversation_id=eq.${chat.conversation_id}`,
       },
-      (payload) => {
 
-        setMessages((prev) => {
+      async (payload) => {
 
-          const exists =
-            prev.some(
-              (m) =>
-                m.id ===
-                payload.new.id
+        const newMessage =
+          payload.new;
+
+        // IF MESSAGE FROM OTHER USER
+        // MARK IT READ IMMEDIATELY
+
+        if (
+          newMessage.sender_id !==
+          me.id
+        ) {
+
+          await supabase
+            .from("messages")
+            .update({
+              is_read: true,
+            })
+            .eq(
+              "id",
+              newMessage.id
             );
 
-          /* console.log("New message received", payload.new, "Exists:", exists); */
+        }
 
-          if (exists)
-            return prev;
+        setMessages(
+          (prev) => {
 
-          return [
-            ...prev,
-            payload.new,
-          ];
+            const exists =
+              prev.some(
+                (m) =>
+                  m.id ===
+                  newMessage.id
+              );
 
-        });
+            if (exists)
+              return prev;
+
+            return [
+              ...prev,
+              newMessage,
+            ];
+
+          }
+        );
+
+        // UPDATE CHAT LIST
+
+        loadChats(
+          me.id
+        );
 
       }
     );
 
-  /*   channel.on(
-      "broadcast",
-      {
-        event: "typing",
-      },
-      ({ payload }) => {
+    channel.subscribe(
+      (status) => {
 
-        if (
-          payload.userId ===
-          me?.id
-        )
-          return;
-
-        setTypingUsers([
-          payload.userId,
-        ]);
-
-        clearTimeout(
-          typingTimeoutRef.current
+        console.log(
+          "Chat Channel:",
+          status
         );
 
-        typingTimeoutRef.current =
-          setTimeout(() => {
-
-            setTypingUsers([]);
-
-          }, 1500);
-
       }
-    ); */
-
-    await channel.subscribe();
+    );
 
     channelRef.current =
       channel;
 
   };
-
   // ================= SEND TYPING =================
 
-  const sendTyping = () => {
+  const sendTyping = async () => {
 
     if (
       !channelRef.current ||
@@ -436,17 +714,25 @@ export default function Messages({
       return;
     }
 
-    channelRef.current.send({
+    try {
 
-      type: "broadcast",
+      await channelRef.current.send({
 
-      event: "typing",
+        type: "broadcast",
 
-      payload: {
-        userId: me.id,
-      },
+        event: "typing",
 
-    });
+        payload: {
+          userId: me.id,
+        },
+
+      });
+
+    } catch (err) {
+
+      console.log(err);
+
+    }
 
   };
 
@@ -539,6 +825,7 @@ export default function Messages({
 
     setSending(false);
   };
+
 
   return (
     <div className="h-screen flex overflow-hidden bg-white dark:bg-[#0f0f10]">
@@ -633,19 +920,33 @@ export default function Messages({
                 </div>
               )}
 
-              <div className="text-left flex-1 min-w-0">
+              <div className="text-left flex-1 min-w-0 flex justify-between items-center gap-2">
 
-                <div className="font-semibold dark:text-white truncate">
+                <div className="min-w-0 flex-1">
 
-                  {chat.name}
+                  <div className="font-semibold dark:text-white truncate">
+
+                    {chat.name}
+
+                  </div>
+
+                  <div className="text-sm text-gray-500 truncate">
+
+                    {chat.lastMessage}
+
+                  </div>
 
                 </div>
 
-                <div className="text-sm text-gray-500 truncate">
+                {chat.unreadCount > 0 && (
 
-                  {chat.lastMessage}
+                  <div className="h-6 min-w-[24px] px-2 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">
 
-                </div>
+                    {chat.unreadCount}
+
+                  </div>
+
+                )}
 
               </div>
 

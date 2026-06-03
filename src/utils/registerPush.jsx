@@ -33,13 +33,17 @@ export const registerPush =
             if (!token) return;
 
             await supabase
-                .from(
-                    "user_push_tokens"
-                )
-                .upsert({
-                    user_id: userId,
-                    token,
-                });
+                .from("user_push_tokens")
+                .upsert(
+                    {
+                        user_id: userId,
+                        token,
+                    },
+                    {
+                        onConflict: "user_id",
+                    }
+                );
+
 
             console.log(
                 "Push token saved"
