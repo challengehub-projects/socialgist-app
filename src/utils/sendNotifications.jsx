@@ -4,7 +4,7 @@ import {
 
 import { messaging } from "../configs/firebase";
 
-export const listenNotifications =
+/* export const listenNotifications =
     () => {
 
         onMessage(
@@ -30,7 +30,7 @@ export const listenNotifications =
             }
         );
     };
-
+ */
 
 export const sendNotification =
     async ({

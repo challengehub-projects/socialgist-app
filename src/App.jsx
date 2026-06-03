@@ -6,13 +6,20 @@ import React, {
   lazy
 } from "react";
 
- import {
+import {
   registerPush,
 } from "./utils/registerPush";
 
 import {
-  listenNotifications,
-} from "./utils/sendNotifications";
+  initNotifications,
+  showNotification,
+} from "./utils/notifications";
+
+/* import initChatDB from "./utils/chatDB";
+
+ */
+/* import listenNotifications from "./utils/sendNotifications"; */
+
 
 import { supabase } from "./configs/supbase";
 
@@ -66,10 +73,33 @@ export default function App() {
 
   }, []);
 
+
+  useEffect(() => {
+    const setup = async () => {
+      if (
+        Capacitor.isNativePlatform()
+      ) {
+        await StatusBar.setOverlaysWebView({
+          overlay: true,
+        });
+      }
+    };
+
+    setup();
+  }, []);
+
   useEffect(() => {
 
     Notification.requestPermission();
 
+  }, []);
+
+  /*   useEffect(() => {
+      initChatDB();
+    }, []); */
+
+  useEffect(async () => {
+    await initNotifications();
   }, []);
 
   // ================= AUTH =================
@@ -105,7 +135,7 @@ export default function App() {
     } =
       await supabase.auth.getSession();
 
-      console.log(session)
+    console.log(session)
 
     setSession(session);
 
@@ -113,10 +143,10 @@ export default function App() {
       setPage("feed");
 
 
-     registerPush(
+      registerPush(
         session.user.id
-      ); 
-      listenNotifications(); 
+      );
+      /* listenNotifications(); */
     }
 
     setLoading(false);
@@ -224,9 +254,26 @@ export default function App() {
   if (loading) {
 
     return (
+      /*  <div className="h-screen bg-white flex items-center justify-center">
+         <div className="flex items-center justify-center py-10">
+           <div className="w-12 h-12 border-[5px] border-purple-200 border-t-fuchsia-600 rounded-full animate-spin"></div>
+         </div>
+ 
+       </div> */
       <div className="h-screen bg-white flex items-center justify-center">
-        <div className="flex items-center justify-center py-10">
-          <div className="w-12 h-12 border-[5px] border-purple-200 border-t-fuchsia-600 rounded-full animate-spin"></div>
+
+        <div className="flex flex-col items-center">
+
+          <img
+            src="/icon.png"
+            alt="logo"
+            className="w-24 h-24 animate-pulse"
+          />
+
+          <h1 className="mt-4 text-2xl font-black text-purple-700">
+            SocialGist
+          </h1>
+
         </div>
 
       </div>

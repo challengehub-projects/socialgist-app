@@ -6,6 +6,10 @@ import React, {
 
 import { supabase } from "../configs/supbase";
 import { sendNotification } from "../utils/sendNotifications";
+import {
+  initNotifications,
+  showNotification,
+} from "../utils/notifications";
 
 import {
   ArrowLeft,
@@ -94,6 +98,11 @@ export default function Messages({
           ) {
             return;
           }
+
+          await showNotification(
+            "New Message",
+            payload.new.content,
+          );
 
           await sendNotification({
 
@@ -201,6 +210,12 @@ export default function Messages({
           }
 
 
+          //APP NOTIFICATION
+
+          await showNotification(
+            "New Message",
+            message.content,
+          );
 
           // BROWSER NOTIFICATION
 
@@ -237,6 +252,28 @@ export default function Messages({
   ]);
 
   useEffect(() => {
+    if (!conversationId)
+      return;
+
+    loadMessages(
+      conversationId
+    );
+
+    const channel =
+      subscribeToMessages(
+        conversationId
+      );
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(
+          channel
+        );
+      }
+    };
+  }, [conversationId]);
+
+  useEffect(() => {
 
     const startChat = async () => {
 
@@ -270,6 +307,11 @@ export default function Messages({
         profile_image:
           post.profile_image,
       };
+
+      await showNotification(
+        "Message",
+        "New Chat Created"
+      );
 
       await sendNotification({
 
@@ -309,58 +351,58 @@ export default function Messages({
   };
 
   // utils/getUnreadMessagesCount.js
-2
+  2
 
- /*  export default async function getUnreadMessagesCount(userId) {
-
-    if (!userId) return 0;
-
-    const {
-      data: conversations, error,
-    } = await supabase
-      .from("conversation_members")
-      .select("conversation_id")
-      .eq("user_id", userId);
-
-    if (error) {
-
-      console.log(error);
-
-      return 0;
-
-    }
-
-    let totalUnread = 0;
-
-    for (const chat of conversations || []) {
-
-      const { count } = await supabase
-        .from("messages")
-        .select("*", {
-          count: "exact",
-          head: true,
-        })
-        .eq(
-          "conversation_id",
-          chat.conversation_id
-        )
-        .neq(
-          "sender_id",
-          userId
-        )
-        .eq(
-          "is_read",
-          false
-        );
-
-      totalUnread +=
-        count || 0;
-
-    }
-
-    return totalUnread;
-
-  } */
+  /*  export default async function getUnreadMessagesCount(userId) {
+ 
+     if (!userId) return 0;
+ 
+     const {
+       data: conversations, error,
+     } = await supabase
+       .from("conversation_members")
+       .select("conversation_id")
+       .eq("user_id", userId);
+ 
+     if (error) {
+ 
+       console.log(error);
+ 
+       return 0;
+ 
+     }
+ 
+     let totalUnread = 0;
+ 
+     for (const chat of conversations || []) {
+ 
+       const { count } = await supabase
+         .from("messages")
+         .select("*", {
+           count: "exact",
+           head: true,
+         })
+         .eq(
+           "conversation_id",
+           chat.conversation_id
+         )
+         .neq(
+           "sender_id",
+           userId
+         )
+         .eq(
+           "is_read",
+           false
+         );
+ 
+       totalUnread +=
+         count || 0;
+ 
+     }
+ 
+     return totalUnread;
+ 
+   } */
   // ================= TIME =================
 
   const formatTime = (date) => {
@@ -525,35 +567,50 @@ export default function Messages({
   const loadMessages = async (
     conversationId
   ) => {
+    try {
 
-    const { data, error } =
-      await supabase
-        .from("messages")
-        .select("*")
-        .eq(
-          "conversation_id",
+      // 1. LOAD SQLITE FIRST
+      const cached =
+        await getLocalMessages(
           conversationId
-        )
-        .order("created_at", {
-          ascending: true,
-        });
+        );
 
-    await sendNotification({
+      setMessages(
+        cached || []
+      );
 
-      title:
-        "New Messages",
+      // 2. CHECK INTERNET
+      const online =
+        await isOnline();
 
-      body:
-        "Check your Chats",
+      if (!online) {
+        console.log(
+          "Offline: using SQLite messages"
+        );
+        return;
+      }
 
-    });
+      // 3. SYNC ONLY NEW MESSAGES
+      await syncConversation(
+        conversationId
+      );
 
-    if (error) {
-      console.log(error);
-      return;
+      // 4. RELOAD SQLITE AFTER SYNC
+      const fresh =
+        await getLocalMessages(
+          conversationId
+        );
+
+      setMessages(
+        fresh || []
+      );
+
+    } catch (err) {
+      console.log(
+        "loadMessages error:",
+        err
+      );
     }
-
-    setMessages(data || []);
   };
 
   // ================= START =================
@@ -769,6 +826,7 @@ export default function Messages({
 
     };
 
+
     await sendNotification({
 
       title:
@@ -811,6 +869,19 @@ export default function Messages({
       .single();
 
     if (!error && data) {
+
+      await saveMessage(
+        data
+      );
+
+      const msgs =
+        await getLocalMessages(
+          conversationId
+        );
+
+      setMessages(
+        msgs
+      );
 
       setMessages((prev) =>
 

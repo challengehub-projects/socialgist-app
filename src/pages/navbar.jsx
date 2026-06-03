@@ -43,6 +43,7 @@ import { supabase } from "../configs/supbase";
 
 import { Preferences } from "@capacitor/preferences";
 import { Network } from "@capacitor/network";
+import { Toast } from "@capacitor/toast";
 
 import ProfileModal from "./profileModal";
 
@@ -455,7 +456,7 @@ export default function TopNavbar({
         x: 0,
         y: 0,
         color: "#ffffff",
-        fontSize: 40,
+        fontSize: 25,
         width: window.innerWidth - 40,
       },
     ]);
@@ -495,6 +496,8 @@ export default function TopNavbar({
 
   const deleteLayer = () => {
     if (!selected) return;
+
+    setLoading(false);
 
     setLayers((prev) =>
       prev.filter(
@@ -702,9 +705,18 @@ export default function TopNavbar({
           payload
         );
 
-        alert(
-          "No internet. Post saved offline and will sync automatically."
-        );
+        await Toast.show({
+          text:
+            "You're Offline",
+
+          duration:
+            "short",
+
+          position:
+            "bottom",
+        });
+
+
 
         resetEditor();
 
@@ -729,6 +741,18 @@ export default function TopNavbar({
         return;
       }
 
+
+      await Toast.show({
+        text:
+          "Post Creates Successfully",
+
+        duration:
+          "short",
+
+        position:
+          "bottom",
+      });
+
       console.log(
         "POST CREATED SUCCESSFULLY"
       );
@@ -743,9 +767,18 @@ export default function TopNavbar({
 
       console.log(err);
 
-      alert(
-        "Something went wrong"
-      );
+      await Toast.show({
+        text:
+          "Something went wrong",
+
+        duration:
+          "short",
+
+        position:
+          "bottom",
+      });
+
+
     }
 
     setLoading(false);

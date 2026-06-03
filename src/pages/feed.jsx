@@ -25,6 +25,7 @@ import {
 import { GiConsoleController } from "react-icons/gi";
 import ProfileModal from "./profileModal"
 import { sendNotification } from "../utils/sendNotifications";
+import { initNotifications, showNotification } from "../utils/notifications";
 
 
 export default function Feed({
@@ -698,20 +699,21 @@ export default function Feed({
               payload.new
                 ?.likes_count || 0;
 
-            
-                console.log(payload.new.user_id, me?.id)
 
-              /*                 payload.new.user_id ===
-              me?.id */
-           
+
 
             if (
 
-              newLikes > oldLikes 
+              newLikes > oldLikes &&
 
-
-
+              payload.new.user_id ===
+              me?.id
             ) {
+
+              await showNotification(
+                "❤️ New Like",
+                "Someone liked your post"
+              );
 
               await sendNotification({
 
@@ -728,10 +730,28 @@ export default function Feed({
             }
 
             else {
+
+         /*      await showNotification(
+                "❤️ Unlike Like Message",
+                "Someone unliked your post"
+              );
+
+              await sendNotification({
+
+                title:
+                  "❤️ Unlike Like Message",
+
+                body:
+                  "Someone unliked your post",
+
+              });
+ */
               console.log("LIKE COUNT CHANGED:", {
                 old: oldLikes,
                 new: newLikes
               });
+
+
             }
 
             // =========================
@@ -754,6 +774,11 @@ export default function Feed({
               me?.id
 
             ) {
+
+              await showNotification(
+                "New Share",
+                "Someone Share your post"
+              );
 
               await sendNotification({
 
@@ -942,6 +967,13 @@ export default function Feed({
 
         return post;
       });
+
+      //APP NOTIFICATION
+
+      await showNotification(
+        "Message",
+        "You liked a post!"
+      );
 
       // BROWSER NOTIFICATION
 

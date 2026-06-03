@@ -1,148 +1,119 @@
 import { supabase } from "../configs/supbase";
-import { sendNotification } from "../utils/sendNotifications";
 
-export const getOrCreateConversation = async (
-  meId,
-  otherUserId
-) => {
-  if (!meId || !otherUserId) {
-    return null;
-  }
+import {
+  isOnline,
+  saveConversation,
+  getOfflineConversation,
+} from "./chatStorage";
 
-  const [a, b] =
-    meId < otherUserId
-      ? [meId, otherUserId]
-      : [otherUserId, meId];
-
-  const chatKey = `${a}_${b}`;
-
-  // FIND EXISTING
-
-  const {
-    data: existing,
-    error: findError,
-  } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("chat_key", chatKey)
-    .maybeSingle();
-
-  if (findError) {
-    console.log(findError);
-    return null;
-  }
-
-  let conversation =
-    existing;
-
-  // CREATE IF MISSING
-
-  if (!conversation) {
-    const {
-      data: created,
-      error: createError,
-    } = await supabase
-      .from("conversations")
-      .insert({
-        chat_key: chatKey,
-      })
-      .select()
-      .single();
-
-    await sendNotification({
-
-      title:
-        "Message Sent",
-
-      body:
-        "You have a new conversation!",
-
-    });
-
-    if (createError) {
-      console.log(createError);
+export const getOrCreateConversation =
+  async (
+    meId,
+    otherUserId
+  ) => {
+    if (
+      !meId ||
+      !otherUserId
+    ) {
       return null;
     }
 
-    conversation =
-      created;
-  }
+    const [a, b] =
+      meId < otherUserId
+        ? [meId, otherUserId]
+        : [otherUserId, meId];
 
-  // ENSURE MEMBERS EXIST
+    const chatKey =
+      `${a}_${b}`;
 
-  const {
-    error: memberError,
-  } = await supabase
-    .from(
-      "conversation_members"
-    )
-    .upsert(
-      [
-        {
-          conversation_id:
-            conversation.id,
-          user_id: a,
-        },
-        {
-          conversation_id:
-            conversation.id,
-          user_id: b,
-        },
-      ],
-      {
-        onConflict:
-          "conversation_id,user_id",
+    const online =
+      await isOnline();
+
+    // OFFLINE MODE
+
+    if (!online) {
+      console.log(
+        "OFFLINE CHAT"
+      );
+
+      const local =
+        await getOfflineConversation(
+          chatKey
+        );
+
+      if (!local)
+        return null;
+
+      return {
+        conversationId:
+          local.id,
+        chatKey:
+          local.chat_key,
+        offline: true,
+      };
+    }
+
+    // ONLINE MODE
+
+    const {
+      data: existing,
+      error,
+    } = await supabase
+      .from(
+        "conversations"
+      )
+      .select("*")
+      .eq(
+        "chat_key",
+        chatKey
+      )
+      .maybeSingle();
+
+    if (error) {
+      console.log(error);
+      return null;
+    }
+
+    let conversation =
+      existing;
+
+    if (!conversation) {
+      const {
+        data: created,
+        error:
+          createError,
+      } = await supabase
+        .from(
+          "conversations"
+        )
+        .insert({
+          chat_key:
+            chatKey,
+        })
+        .select()
+        .single();
+
+      if (
+        createError
+      ) {
+        console.log(
+          createError
+        );
+        return null;
       }
+
+      conversation =
+        created;
+    }
+
+    await saveConversation(
+      conversation
     );
 
-  if (memberError) {
-    console.log(
-      memberError
-    );
-  }
-
-  // GET LAST MESSAGE
-
-  const {
-    data: lastMessage,
-  } = await supabase
-    .from("messages")
-    .select("*")
-    .eq(
-      "conversation_id",
-      conversation.id
-    )
-    .order(
-      "created_at",
-      {
-        ascending: false,
-      }
-    )
-    .limit(1)
-    .maybeSingle();
-
-
-
-  await sendNotification({
-
-    title:
-      "New Messages",
-
-    body:
-      lastMessage,
-
-  });
-
-  return {
-    conversationId:
-      conversation.id,
-
-    chatKey,
-
-    exists:
-      !!existing,
-
-    lastMessage:
-      lastMessage || null,
+    return {
+      conversationId:
+        conversation.id,
+      chatKey,
+      offline: false,
+    };
   };
-};
