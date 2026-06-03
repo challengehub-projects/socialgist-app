@@ -7,7 +7,7 @@ import {
   Briefcase,
 } from "lucide-react";
 
-export default function ProfilePage() {
+export default function ProfilePage({ onNavigate}) {
   const [activeTab, setActiveTab] = useState("posts");
 
   const user = {

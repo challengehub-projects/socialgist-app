@@ -5,6 +5,7 @@ import React, {
 } from "react";
 
 import { supabase } from "../configs/supbase";
+import { sendNotification } from "../utils/sendNotifications";
 
 import {
   ArrowLeft,
@@ -123,6 +124,16 @@ export default function Messages({
         profile_image:
           post.profile_image,
       };
+
+      await sendNotification({
+
+        title:
+          "Message",
+
+        body:
+          "New Chat Created",
+
+      });
 
       setActiveChat(chat);
 
@@ -281,6 +292,16 @@ export default function Messages({
           ascending: true,
         });
 
+    await sendNotification({
+
+      title:
+        "New Messages",
+
+      body:
+        "Check your Chats",
+
+    });
+
     if (error) {
       console.log(error);
       return;
@@ -301,6 +322,7 @@ export default function Messages({
 
   }, [me]);
 
+
   // ================= OPEN CHAT =================
 
   const openChat = async (
@@ -315,114 +337,104 @@ export default function Messages({
       chat.conversation_id
     );
 
-
-    supabase
-      .channel(
-        `messages-${chat.conversation_id}`
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${chat.conversation_id}`,
-        },
-        (payload) => {
-
-          setMessages(
-            (prev) => {
-
-              const exists =
-                prev.find(
-                  (m) =>
-                    m.id ===
-                    payload.new.id
-                );
-
-              if (exists)
-                return prev;
-
-              return [
-                ...prev,
-                payload.new,
-              ];
-            }
-          );
-        }
-      )
-      .subscribe();
-
-    setupTyping(
-      chat.conversation_id
-    );
-  };
-
-  // ================= TYPING =================
-
-  const setupTyping = (
-    conversationId
-  ) => {
-
     if (channelRef.current) {
 
-      supabase.removeChannel(
+      await supabase.removeChannel(
         channelRef.current
       );
+
+      channelRef.current =
+        null;
 
     }
 
     const channel =
       supabase.channel(
-        `typing-${conversationId}`
+        `chat-${chat.conversation_id}`
       );
 
-    channel
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `conversation_id=eq.${chat.conversation_id}`,
+      },
+      (payload) => {
 
-      .on(
-        "broadcast",
-        {
-          event: "typing",
-        },
+        setMessages((prev) => {
 
-        ({ payload }) => {
+          const exists =
+            prev.some(
+              (m) =>
+                m.id ===
+                payload.new.id
+            );
 
-          if (
-            payload.userId ===
-            me?.id
-          )
-            return;
+          /* console.log("New message received", payload.new, "Exists:", exists); */
 
-          setTypingUsers([
-            payload.userId,
-          ]);
+          if (exists)
+            return prev;
 
-          clearTimeout(
-            typingTimeoutRef.current
-          );
+          return [
+            ...prev,
+            payload.new,
+          ];
 
-          typingTimeoutRef.current =
-            setTimeout(() => {
+        });
 
-              setTypingUsers([]);
+      }
+    );
 
-            }, 1500);
-        }
-      )
+  /*   channel.on(
+      "broadcast",
+      {
+        event: "typing",
+      },
+      ({ payload }) => {
 
-      .subscribe();
+        if (
+          payload.userId ===
+          me?.id
+        )
+          return;
+
+        setTypingUsers([
+          payload.userId,
+        ]);
+
+        clearTimeout(
+          typingTimeoutRef.current
+        );
+
+        typingTimeoutRef.current =
+          setTimeout(() => {
+
+            setTypingUsers([]);
+
+          }, 1500);
+
+      }
+    ); */
+
+    await channel.subscribe();
 
     channelRef.current =
       channel;
+
   };
+
+  // ================= SEND TYPING =================
 
   const sendTyping = () => {
 
     if (
       !channelRef.current ||
       !me
-    )
+    ) {
       return;
+    }
 
     channelRef.current.send({
 
@@ -435,6 +447,7 @@ export default function Messages({
       },
 
     });
+
   };
 
   // ================= SEND =================
@@ -469,6 +482,16 @@ export default function Messages({
       status: "sending",
 
     };
+
+    await sendNotification({
+
+      title:
+        "Message Sent",
+
+      body:
+        text,
+
+    });
 
     setMessages((prev) => [
       ...prev,

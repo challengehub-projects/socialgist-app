@@ -6,6 +6,14 @@ import React, {
   lazy
 } from "react";
 
+ import {
+  registerPush,
+} from "./utils/registerPush";
+
+import {
+  listenNotifications,
+} from "./utils/sendNotifications";
+
 import { supabase } from "./configs/supbase";
 
 import { Network } from "@capacitor/network";
@@ -58,6 +66,12 @@ export default function App() {
 
   }, []);
 
+  useEffect(() => {
+
+    Notification.requestPermission();
+
+  }, []);
+
   // ================= AUTH =================
 
   useEffect(() => {
@@ -91,10 +105,18 @@ export default function App() {
     } =
       await supabase.auth.getSession();
 
+      console.log(session)
+
     setSession(session);
 
     if (session) {
       setPage("feed");
+
+
+     registerPush(
+        session.user.id
+      ); 
+      listenNotifications(); 
     }
 
     setLoading(false);
@@ -242,7 +264,7 @@ export default function App() {
 
   // ================= MESSAGES =================
 
-    if (page === "messages") {
+  if (page === "messages") {
 
     return (
       <Messages
@@ -254,16 +276,7 @@ export default function App() {
     );
   }
 
- /*  {
-    page === "messages" && (
-      <Messages
-        post={selectedPost}
-        onBack={() =>
-          setPage("feed")
-        }
-      />
-    )
-  } */
+
 
 
   // ============ profile =============
@@ -295,6 +308,7 @@ export default function App() {
     <>
 
       <TopNavbar
+        onOpenMessages={openMessages}
         onNavigate={setPage}
       />
 

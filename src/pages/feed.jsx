@@ -1136,7 +1136,7 @@ ${post.likes_count || 0} likes
       <div className="w-full max-w-2xl mx-auto p-2 sm:p-4">
         {/* WELCOME CARD */}
 
-        <div className="mb-4 overflow-hidden rounded-3xl bg-gradient-to-br from-purple-700 via-fuchsia-600 to-pink-500 p-6 text-white relative">
+        <div className="mb-4 overflow-hidden rounded-3xl bg-gradient-to-br from-purple-700 via-fuchsia-600 to-pink-500 p-6 shadow-2xl text-white relative">
           <div className="absolute top-0 right-0 opacity-10">
             <Sparkles size={150} />
           </div>
@@ -1220,7 +1220,7 @@ ${post.likes_count || 0} likes
           return (
             <div
               key={post.id}
-              className="bg-white dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden  border border-gray-100 dark:border-white/5"
+              className="bg-white dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
             >
               {/* HEADER */}
 

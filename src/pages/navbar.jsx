@@ -44,9 +44,12 @@ export default function TopNavbar({
   toggleDarkMode,
   onNavigate,
   onPostCreated,
+  onOpenMessages,
 }) {
   const fileRef = useRef();
   const textRefs = useRef({});
+
+  const [post, setPost] = useState(null);
 
   const [showCreateModal, setShowCreateModal] =
     useState(false);
@@ -901,7 +904,9 @@ export default function TopNavbar({
 
             {/* MSG */}
 
-            <button className={iconBtn}>
+            <button className={iconBtn}
+              onClick={() => onOpenMessages(post)}
+            >
 
               <MessageCircle
                 size={18}

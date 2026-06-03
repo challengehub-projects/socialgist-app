@@ -1,4 +1,5 @@
 import { supabase } from "../configs/supbase";
+import { sendNotification } from "../utils/sendNotifications";
 
 export const getOrCreateConversation = async (
   meId,
@@ -47,6 +48,16 @@ export const getOrCreateConversation = async (
       })
       .select()
       .single();
+
+    await sendNotification({
+
+      title:
+        "Message Sent",
+
+      body:
+        "You have a new conversation!",
+
+    });
 
     if (createError) {
       console.log(createError);
@@ -109,6 +120,18 @@ export const getOrCreateConversation = async (
     )
     .limit(1)
     .maybeSingle();
+
+
+
+  await sendNotification({
+
+    title:
+      "New Messages",
+
+    body:
+      lastMessage,
+
+  });
 
   return {
     conversationId:
