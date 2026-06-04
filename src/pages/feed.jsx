@@ -26,6 +26,7 @@ import { GiConsoleController } from "react-icons/gi";
 import ProfileModal from "./profileModal"
 import { sendNotification } from "../utils/sendNotifications";
 import { initNotifications, showNotification } from "../utils/notifications";
+import { Capacitor } from "@capacitor/core";
 
 
 export default function Feed({
@@ -74,6 +75,8 @@ export default function Feed({
   const [loadingMore, setLoadingMore] = useState(false);
 
   // ================= TOAST =================
+
+
 
   const showToast = async (
     message
@@ -466,16 +469,7 @@ export default function Feed({
     showLoader = false
   ) => {
     try {
-      const { datas, errorlogs } =
-        await supabase
-          .from("notifications")
-          .insert({
-            title: "Test",
-            body: "Hello World",
-            user_id: me.id,
-          });
 
-      console.log(datas, errorlogs);
       if (showLoader) {
         setLoading(true);
       }
@@ -599,6 +593,8 @@ export default function Feed({
           data?.user || null
         );
 
+        console.log(data)
+
       };
 
     getUser();
@@ -702,18 +698,28 @@ export default function Feed({
 
 
 
+            console.log(payload.new.user_id)
+
             if (
+
 
               newLikes > oldLikes &&
 
-              payload.new.user_id ===
-              me?.id
+              payload.new.user_id === me?.id 
+
             ) {
 
-              await showNotification(
-                "❤️ New Like",
-                "Someone liked your post"
-              );
+              if (
+                Capacitor.isNativePlatform()
+              ) {
+                await showNotification(
+                  "❤️ New Like",
+                  "Someone liked your post"
+                );
+
+              }
+
+
 
               await sendNotification({
 
@@ -731,21 +737,21 @@ export default function Feed({
 
             else {
 
-         /*      await showNotification(
-                "❤️ Unlike Like Message",
-                "Someone unliked your post"
-              );
-
-              await sendNotification({
-
-                title:
-                  "❤️ Unlike Like Message",
-
-                body:
-                  "Someone unliked your post",
-
-              });
- */
+              /*      await showNotification(
+                     "❤️ Unlike Like Message",
+                     "Someone unliked your post"
+                   );
+     
+                   await sendNotification({
+     
+                     title:
+                       "❤️ Unlike Like Message",
+     
+                     body:
+                       "Someone unliked your post",
+     
+                   });
+      */
               console.log("LIKE COUNT CHANGED:", {
                 old: oldLikes,
                 new: newLikes
@@ -775,10 +781,13 @@ export default function Feed({
 
             ) {
 
-              await showNotification(
-                "New Share",
-                "Someone Share your post"
-              );
+              if (Capacitor.isNativePlatform) {
+                await showNotification(
+                  "New Share",
+                  "Someone Share your post"
+                );
+
+              }
 
               await sendNotification({
 
@@ -877,17 +886,19 @@ export default function Feed({
             if (
               status.connected
             ) {
-              await showToast(
-                "You're back online"
-              );
+              if (Capacitor.isNativePlatform) {
+                await showToast(
+                  "You're back online"
+                );
 
-              // SYNC OFFLINE LIKES
+                // SYNC OFFLINE LIKES
 
-              await syncOfflineLikes();
+                await syncOfflineLikes();
 
-              // REFRESH POSTS
+                // REFRESH POSTS
 
-              fetchPosts();
+                fetchPosts();
+              }
             } else {
               setHasMore(false)
               await showToast(
@@ -969,11 +980,14 @@ export default function Feed({
       });
 
       //APP NOTIFICATION
+      if (Capacitor.isNativePlatform) {
 
-      await showNotification(
-        "Message",
-        "You liked a post!"
-      );
+        await showNotification(
+          "Message",
+          "You liked a post!"
+        );
+
+      }
 
       // BROWSER NOTIFICATION
 

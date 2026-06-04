@@ -15,9 +15,9 @@ import {
   showNotification,
 } from "./utils/notifications";
 
-/* import initChatDB from "./utils/chatDB";
+import { initChatDB } from "./utils/chatStorage";
 
- */
+
 /* import listenNotifications from "./utils/sendNotifications"; */
 
 
@@ -36,6 +36,10 @@ import TopNavbar from "./pages/navbar";
 import Messages from "./pages/messages";
 import ProfilePage from "./pages/profile";
 import ProfileModal from "./pages/profileModal";
+import { Capacitor } from "@capacitor/core";
+import { getLocalMessages } from "./utils/chatSync";
+
+
 
 export default function App() {
 
@@ -58,6 +62,27 @@ export default function App() {
     useState(null);
 
 
+  console.log(
+    "Platform:",
+    Capacitor.getPlatform()
+  );
+
+  console.log(
+    "Native:",
+    Capacitor.isNativePlatform()
+  );
+
+  if (
+    Capacitor.isNativePlatform()
+  ) {
+    console.log(
+      "Running inside Android/iOS app"
+    );
+  } else {
+    console.log(
+      "Running in browser"
+    );
+  }
 
   // ================= SPLASH =================
 
@@ -94,9 +119,15 @@ export default function App() {
 
   }, []);
 
-  /*   useEffect(() => {
-      initChatDB();
-    }, []); */
+  useEffect(() => {
+    const start = async () => {
+      await initChatDB();
+    };
+
+    if (Capacitor.isNativePlatform) {
+      start();
+    }
+  }, []);
 
   useEffect(async () => {
     await initNotifications();

@@ -23,6 +23,8 @@ import {
 import {
   getOrCreateConversation,
 } from "../utils/uilts";
+import { Capacitor } from "@capacitor/core";
+import { isOnline, saveMessage, getLocalMessages, syncConversation } from "../utils/chatSync";
 
 export default function Messages({
   onBack,
@@ -99,20 +101,25 @@ export default function Messages({
             return;
           }
 
-          await showNotification(
-            "New Message",
-            payload.new.content,
-          );
-
-          await sendNotification({
-
-            title: "New Message",
-
-            body:
+          if (Capacitor.isNativePlatform) {
+            await showNotification(
+              "New Message",
               payload.new.content,
+            );
 
-          });
+          }
 
+          else {
+            await sendNotification({
+
+              title: "New Message",
+
+              body:
+                payload.new.content,
+
+            });
+
+          }
         }
       );
 
@@ -212,26 +219,36 @@ export default function Messages({
 
           //APP NOTIFICATION
 
-          await showNotification(
-            "New Message",
-            message.content,
-          );
+          if (Capacitor.isNativePlatform) {
 
-          // BROWSER NOTIFICATION
 
-          await sendNotification({
-
-            title:
+            await showNotification(
               "New Message",
-
-            body:
               message.content,
+            );
 
-          });
+          }
 
-          // REFRESH CHAT LIST
+          else {
+
+            // BROWSER NOTIFICATION
+
+            await sendNotification({
+
+              title:
+                "New Message",
+
+              body:
+                message.content,
+
+            });
+
+            // REFRESH CHAT LIST
+
+          }
 
           loadChats(me.id);
+
 
         }
       );
@@ -251,54 +268,73 @@ export default function Messages({
     activeChat,
   ]);
 
+  /*  useEffect(() => {
+     if (!conversationId)
+       return;
+ 
+     loadMessages(
+       conversationId
+     );
+ 
+     const channel =
+       subscribeToMessages(
+         conversationId
+       );
+ 
+     return () => {
+       if (channel) {
+         supabase.removeChannel(
+           channel
+         );
+       }
+     };
+   }, [conversationId]); */
+
   useEffect(() => {
-    if (!conversationId)
-      return;
 
-    loadMessages(
-      conversationId
-    );
+    const startChat = async (
+      post
+    ) => {
 
-    const channel =
-      subscribeToMessages(
-        conversationId
+      console.log(
+        "Starting chat with post",
+        post
       );
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(
-          channel
-        );
-      }
-    };
-  }, [conversationId]);
-
-  useEffect(() => {
-
-    const startChat = async () => {
-
-      console.log("Starting chat with post", post);
 
       if (
         !me?.id ||
         !post?.user_id
-      ) return;
+      ) {
+        return;
+      }
+
+      // DON'T CHAT WITH YOURSELF
 
       if (
-        me.id === post.user_id
-      ) return;
+        me.id ===
+        post.user_id
+      ) {
+        return;
+      }
 
       const result =
         await getOrCreateConversation(
           me.id,
-          post.user_id
+          post.user_id,
+          post.profile_name
         );
 
-      if (!result) return;
+      if (!result) {
+        return;
+      }
 
       const chat = {
+
         conversation_id:
           result.conversationId,
+
+        user_id:
+          post.user_id,
 
         name:
           post.profile_name ||
@@ -306,26 +342,39 @@ export default function Messages({
 
         profile_image:
           post.profile_image,
+
       };
 
-      await showNotification(
-        "Message",
-        "New Chat Created"
+      if (
+        Capacitor.isNativePlatform()
+      ) {
+
+        await showNotification(
+          "Message",
+          "New Chat Created"
+        );
+
+      } else {
+
+        await sendNotification({
+
+          title:
+            "Message",
+
+          body:
+            "New Chat Created",
+
+        });
+
+      }
+
+      setActiveChat(
+        chat
       );
 
-      await sendNotification({
-
-        title:
-          "Message",
-
-        body:
-          "New Chat Created",
-
-      });
-
-      setActiveChat(chat);
-
-      setMobileChatOpen(true);
+      setMobileChatOpen(
+        true
+      );
 
       await loadMessages(
         result.conversationId
@@ -334,9 +383,10 @@ export default function Messages({
       setupTyping(
         result.conversationId
       );
+
     };
 
-    startChat();
+    startChat(post);
 
   }, [me, post]);
 
@@ -420,13 +470,24 @@ export default function Messages({
 
   // ================= LOAD CHATS =================
 
-  const loadChats = async (userId) => {
+  const loadChats = async (
+    userId
+  ) => {
 
-    const { data, error } =
-      await supabase
-        .from("conversation_members")
-        .select("conversation_id")
-        .eq("user_id", userId);
+    const {
+      data,
+      error,
+    } = await supabase
+      .from(
+        "conversation_members"
+      )
+      .select(
+        "conversation_id"
+      )
+      .eq(
+        "user_id",
+        userId
+      );
 
     if (error) {
 
@@ -447,39 +508,58 @@ export default function Messages({
 
             // UNREAD COUNT
 
-            const { count } =
-              await supabase
-                .from("messages")
-                .select("*", {
-                  count: "exact",
-                  head: true,
-                })
-                .eq(
-                  "conversation_id",
-                  conversationId
-                )
-                .neq(
-                  "sender_id",
-                  userId
-                )
-                .eq(
-                  "is_read",
-                  false
-                );
+            const {
+              count,
+            } = await supabase
+              .from("messages")
+              .select("*", {
+                count:
+                  "exact",
+                head: true,
+              })
+              .eq(
+                "conversation_id",
+                conversationId
+              )
+              .neq(
+                "sender_id",
+                userId
+              )
+              .eq(
+                "is_read",
+                false
+              );
 
             // FIND OTHER MEMBER
 
             const {
               data: members,
+              error:
+              membersError,
             } = await supabase
               .from(
                 "conversation_members"
               )
-              .select("user_id")
+              .select(`
+              user_id,
+              full_name
+            `)
               .eq(
                 "conversation_id",
                 conversationId
               );
+
+            if (
+              membersError
+            ) {
+
+              console.log(
+                membersError
+              );
+
+              return null;
+
+            }
 
             const otherMember =
               members?.find(
@@ -488,25 +568,17 @@ export default function Messages({
                   userId
               );
 
-            if (!otherMember)
+            console.log(
+              "Members:",
+              members,
+              otherMember
+            );
+
+            if (
+              !otherMember
+            ) {
               return null;
-
-            // PROFILE
-
-            const {
-              data: profile,
-            } = await supabase
-              .from("profiles")
-              .select(`
-              id,
-              full_name,
-              avatar_url
-            `)
-              .eq(
-                "id",
-                otherMember.user_id
-              )
-              .maybeSingle();
+            }
 
             // LAST MESSAGE
 
@@ -522,7 +594,8 @@ export default function Messages({
               .order(
                 "created_at",
                 {
-                  ascending: false,
+                  ascending:
+                    false,
                 }
               )
               .limit(1)
@@ -534,14 +607,14 @@ export default function Messages({
                 conversationId,
 
               user_id:
-                profile?.id,
+                otherMember.user_id,
 
               name:
-                profile?.full_name ||
+                otherMember.full_name ||
                 "Unknown User",
 
               avatar:
-                profile?.avatar_url,
+                null,
 
               lastMessage:
                 lastMsg?.content ||
@@ -557,7 +630,9 @@ export default function Messages({
       );
 
     setChats(
-      formatted.filter(Boolean)
+      formatted.filter(
+        Boolean
+      )
     );
 
   };
@@ -569,47 +644,71 @@ export default function Messages({
   ) => {
     try {
 
-      // 1. LOAD SQLITE FIRST
-      const cached =
+      // WEB
+      if (
+        !Capacitor.isNativePlatform()
+      ) {
+
+        const {
+          data,
+          error,
+        } = await supabase
+          .from("messages")
+          .select("*")
+          .eq(
+            "conversation_id",
+            conversationId
+          )
+          .order(
+            "created_at",
+            {
+              ascending: true,
+            }
+          );
+
+        if (error) {
+          console.log(error);
+          return;
+        }
+
+        setMessages(
+          data || []
+        );
+
+        return;
+      }
+
+      // ANDROID / IOS
+
+      const local =
         await getLocalMessages(
           conversationId
         );
 
-      setMessages(
-        cached || []
-      );
-
-      // 2. CHECK INTERNET
-      const online =
-        await isOnline();
-
-      if (!online) {
-        console.log(
-          "Offline: using SQLite messages"
-        );
-        return;
+      if (local?.length) {
+        setMessages(local);
       }
 
-      // 3. SYNC ONLY NEW MESSAGES
       await syncConversation(
         conversationId
       );
 
-      // 4. RELOAD SQLITE AFTER SYNC
-      const fresh =
+      const updated =
         await getLocalMessages(
           conversationId
         );
 
-      setMessages(
-        fresh || []
-      );
+      if (updated?.length) {
+        setMessages(updated);
+      }
 
     } catch (err) {
+
       console.log(
         "loadMessages error:",
         err
       );
+
     }
   };
 
@@ -627,7 +726,6 @@ export default function Messages({
 
 
   // ================= OPEN CHAT =================
-
   const openChat = async (
     chat
   ) => {
@@ -636,8 +734,7 @@ export default function Messages({
 
     setMobileChatOpen(true);
 
-    // MARK ALL RECEIVED
-    // MESSAGES AS READ
+    // MARK READ
 
     await supabase
       .from("messages")
@@ -659,13 +756,27 @@ export default function Messages({
       me.id
     );
 
+    // LOAD MESSAGES
     await loadMessages(
       chat.conversation_id
     );
 
+    const debugMsgs =
+      await getLocalMessages(
+        chat.conversation_id
+      );
+
+    console.log(
+      "LOCAL CHAT:",
+      debugMsgs.length,
+      debugMsgs
+    );
+
     // REMOVE OLD CHANNEL
 
-    if (channelRef.current) {
+    if (
+      channelRef.current
+    ) {
 
       await supabase.removeChannel(
         channelRef.current
@@ -678,25 +789,36 @@ export default function Messages({
 
     const channel =
       supabase.channel(
-        `chat-${chat.conversation_id}-${Date.now()}`
+        `chat-${chat.conversation_id}`
       );
 
     channel.on(
       "postgres_changes",
       {
         event: "INSERT",
-        schema: "public",
-        table: "messages",
+        schema:
+          "public",
+        table:
+          "messages",
         filter: `conversation_id=eq.${chat.conversation_id}`,
       },
 
-      async (payload) => {
+      async (
+        payload
+      ) => {
 
         const newMessage =
           payload.new;
 
-        // IF MESSAGE FROM OTHER USER
-        // MARK IT READ IMMEDIATELY
+        if (
+          Capacitor.isNativePlatform()
+        ) {
+
+          await saveMessage(
+            newMessage
+          );
+
+        }
 
         if (
           newMessage.sender_id !==
@@ -734,12 +856,6 @@ export default function Messages({
             ];
 
           }
-        );
-
-        // UPDATE CHAT LIST
-
-        loadChats(
-          me.id
         );
 
       }
@@ -826,16 +942,28 @@ export default function Messages({
 
     };
 
+    if (Capacitor.isNativePlatform) {
 
-    await sendNotification({
-
-      title:
+      await showNotification(
         "Message Sent",
+        text
+      )
 
-      body:
-        text,
+    }
 
-    });
+    else {
+
+      await sendNotification({
+
+        title:
+          "Message Sent",
+
+        body:
+          text,
+
+      });
+
+    }
 
     setMessages((prev) => [
       ...prev,
@@ -874,19 +1002,8 @@ export default function Messages({
         data
       );
 
-      const msgs =
-        await getLocalMessages(
-          conversationId
-        );
-
-      setMessages(
-        msgs
-      );
-
       setMessages((prev) =>
-
         prev.map((m) =>
-
           m.id === tempId
             ? data
             : m

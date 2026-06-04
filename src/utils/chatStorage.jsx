@@ -2,6 +2,7 @@ import {
   CapacitorSQLite,
   SQLiteConnection,
 } from "@capacitor-community/sqlite";
+import { Capacitor } from "@capacitor/core";
 
 import { Network } from "@capacitor/network";
 
@@ -79,8 +80,13 @@ export const saveConversation =
   async (
     conversation
   ) => {
+
     const db =
       await getDB();
+
+    if (!db) {
+      return;
+    }
 
     await db.run(
       `
@@ -104,22 +110,25 @@ export const getOfflineConversation =
   async (
     chatKey
   ) => {
-    const db =
-      await getDB();
+    if (Capacitor.isNativePlatform) {
+      const db =
+        await getDB();
 
-    const result =
-      await db.query(
-        `
+      const result =
+        await db.query(
+          `
         SELECT *
         FROM conversations
         WHERE chat_key = ?
         LIMIT 1
         `,
-        [chatKey]
+          [chatKey]
+        );
+
+      return (
+        result.values?.[0] ||
+        null
       );
 
-    return (
-      result.values?.[0] ||
-      null
-    );
+    }
   };
