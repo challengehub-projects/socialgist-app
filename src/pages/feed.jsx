@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { Preferences } from "@capacitor/preferences";
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
-/* import { Share } from "@capacitor/share"; */
 import { Filesystem, Directory, } from "@capacitor/filesystem";
 import {
   MessageCircle,
@@ -13,7 +12,6 @@ import {
   RefreshCcw,
   ThumbsUp,
   Heart,
-  Share,
   Send,
   Share2,
   Flame,
@@ -27,7 +25,8 @@ import ProfileModal from "./profileModal"
 import { sendNotification } from "../utils/sendNotifications";
 import { initNotifications, showNotification } from "../utils/notifications";
 import { Capacitor } from "@capacitor/core";
-
+import { toPng } from "html-to-image";
+/* import Share from "@capacitor/share"; */
 
 export default function Feed({
   onOpenMessages,
@@ -61,6 +60,15 @@ export default function Feed({
   const [selectedProfile, setSelectedProfile] =
     useState(null);
 
+  const [activeTab, setActiveTab] = useState("all");
+
+
+
+  useEffect(() => {
+  setPage(0);
+  setPosts([]);
+  fetchPosts(true);
+}, [activeTab]);
 
   const openProfileModal = (post) => {
     setSelectedProfile(post);
@@ -494,21 +502,27 @@ export default function Feed({
       const from = page * POSTS_PER_PAGE;
       const to = from + POSTS_PER_PAGE - 1;
 
-      const { data, error } =
-        await supabase
-          .from("posts")
-          .select("*")
-          .order("created_at", {
-            ascending: false,
-          })
-          .range(from, to);
       /*      const { data, error } =
              await supabase
                .from("posts")
                .select("*")
                .order("created_at", {
                  ascending: false,
-               }); */
+               })
+               .range(from, to); */
+      let query = supabase
+        .from("posts")
+        .select("*")
+        .order("created_at", {
+          ascending: false,
+        });
+
+      // ================= CATEGORY FILTER =================
+      if (activeTab !== "all") {
+        query = query.eq("category", activeTab);
+      }
+
+      const { data, error } = await query.range(from, to);
 
       if (error) {
         console.log(error);
@@ -705,7 +719,7 @@ export default function Feed({
 
               newLikes > oldLikes &&
 
-              payload.new.user_id === me?.id 
+              payload.new.user_id === me?.id
 
             ) {
 
@@ -840,6 +854,14 @@ export default function Feed({
         );
 
       });
+
+    try {
+
+    } catch (error) {
+
+    } finally {
+
+    }
 
     return () => {
 
@@ -1110,57 +1132,206 @@ export default function Feed({
 
   // ================= SHARE =================
 
-  const sharePost = async (
-    post
-  ) => {
+  const sharePost = async (post) => {
+
     try {
+      const caption =
+        post.description ||
+        "Check this post on SocialGist";
+
       const shareUrl =
-        post.image ||
         `https://socialgist-app.vercel.app/post/${post.id}`;
 
-      const caption = `${post.description ||
-        "Check this post on SocialGist"
-        }
-
-${post.likes_count || 0} likes
-@${(
-          post.profile_name ||
-          "user"
-        )
+      const username =
+        `@${(post.profile_name || "user")
           .replace(/\s+/g, "")
           .toLowerCase()}`;
 
-      await Share.share({
-        title: "SocialGist",
-        text: caption,
-        url: shareUrl,
-        dialogTitle:
-          "Share Post",
-      });
+      // =========================
+      // 1. MOBILE (CAPACITOR)
+      // =========================
+      if (Capacitor.getPlatform() !== "web") {
+        await share.share({
+          title: "SocialGist",
+          text: `${caption}\n\n${username}\n❤️ ${post.likes_count || 0} likes`,
+          url: shareUrl,
+          dialogTitle: "Share Post",
+        });
+
+        return;
+      }
+
+      // =========================
+      // 2. WEB SHARE API (if available)
+      // =========================
+      if (navigator.share) {
+        await navigator.share({
+          title: "SocialGist",
+          text: `${caption} ${username}`,
+          url: shareUrl,
+        });
+
+        return;
+      }
+
+      // =========================
+      // 3. FALLBACK → GENERATE IMAGE SHARE (TikTok style)
+      // =========================
+
+      const node = document.createElement("div");
+
+      node.style.width = "1080px";
+      node.style.height = "1920px";
+      node.style.padding = "60px";
+      node.style.background =
+        post.image
+          ? `url(${post.image}) center/cover no-repeat`
+          : "linear-gradient(135deg,#6d28d9,#ec4899,#ef4444)";
+      node.style.color = "white";
+      node.style.display = "flex";
+      node.style.flexDirection = "column";
+      node.style.justifyContent = "space-between";
+      node.style.fontFamily = "Arial";
+
+      node.innerHTML = `
+      <div>
+        <h1 style="font-size:60px;font-weight:900;">
+          SocialGist
+        </h1>
+      </div>
+
+      <div>
+        <h2 style="font-size:70px;font-weight:900;line-height:1.2;">
+          ${caption}
+        </h2>
+
+        <p style="font-size:40px;margin-top:20px;">
+          ${username}
+        </p>
+      </div>
+
+      <div style="font-size:35px;opacity:0.9;">
+        ❤️ ${post.likes_count || 0} likes • SocialGist
+      </div>
+    `;
+
+      document.body.appendChild(node);
+
+      const dataUrl = await toPng(node);
+
+      document.body.removeChild(node);
+
+      // download image OR share it
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "socialgist-post.png";
+      link.click();
     } catch (err) {
-      console.log(
-        "Share error:",
-        err
-      );
+      console.log("Share error:", err);
     }
   };
 
   // ================= LOADING =================
+  /* 
+    if (loading) {
+      return (
+        <div className="h-screen bg-white dark:bg-[#0f0f10] flex flex-col items-center justify-center">
+          <img
+            src="/icon.png"
+            className="w-24 h-24 animate-pulse"
+          />
+        </div>
+      );
+    } */
 
   if (loading) {
     return (
-      <div className="h-screen bg-white dark:bg-[#0f0f10] flex flex-col items-center justify-center">
-        <img
-          src="/icon.png"
-          className="w-24 h-24 animate-pulse"
-        />
+      <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0f0f10] pb-24">
+
+        {/* TOP BAR SKELETON */}
+        <div className="sticky top-0 z-40 bg-white/80 dark:bg-[#111]/80 backdrop-blur-xl border-b border-gray-200 dark:border-white/10">
+          <div className="h-14 px-4 flex items-center justify-between">
+
+            <div className="h-4 w-28 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+
+            <div className="flex gap-3">
+              <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
+              <div className="h-10 w-20 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
+            </div>
+
+          </div>
+        </div>
+
+        {/* FEED HEADER SKELETON */}
+        <div className="w-full max-w-2xl mx-auto p-4 space-y-4">
+
+          {/* WELCOME CARD SKELETON */}
+          <div className="rounded-3xl p-6 bg-gray-200 dark:bg-white/5 animate-pulse h-48" />
+
+          {/* POST SKELETONS */}
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-3xl bg-white dark:bg-[#18191A] border border-gray-100 dark:border-white/5 p-4 space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gray-200 dark:bg-white/10 animate-pulse" />
+                <div className="flex-1">
+                  <div className="h-3 w-32 bg-gray-200 dark:bg-white/10 rounded animate-pulse mb-2" />
+                  <div className="h-2 w-20 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+                </div>
+              </div>
+
+              <div className="h-4 w-full bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+              <div className="h-4 w-3/4 bg-gray-200 dark:bg-white/10 rounded animate-pulse" />
+
+              <div className="h-40 bg-gray-200 dark:bg-white/10 rounded-xl animate-pulse" />
+
+              <div className="flex gap-3 pt-2">
+                <div className="h-10 flex-1 bg-gray-200 dark:bg-white/10 rounded-xl animate-pulse" />
+                <div className="h-10 flex-1 bg-gray-200 dark:bg-white/10 rounded-xl animate-pulse" />
+                <div className="h-10 flex-1 bg-gray-200 dark:bg-white/10 rounded-xl animate-pulse" />
+              </div>
+            </div>
+          ))}
+
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f5f5f5] dark:bg-[#0f0f10] pb-24">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0f0f10] pb-24">
       {/* TOP */}
+
+      <div className="px-3 pt-3 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 w-max">
+
+          {[
+            "all",
+            "sports",
+            "memes",
+            "jokes",
+            "dating",
+            "trading",
+            "finance",
+            "academics",
+          ].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all active:scale-95
+          ${activeTab === tab
+                  ? "bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md"
+                  : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10"
+                }`}
+            >
+              {tab}
+            </button>
+          ))}
+
+        </div>
+      </div>
 
       <div className="sticky top-0 z-40 backdrop-blur-xl bg-white/80 dark:bg-[#111]/80 border-b border-gray-200 dark:border-white/10">
         <div className="h-14 px-4 flex items-center justify-between">
@@ -1297,7 +1468,7 @@ ${post.likes_count || 0} likes
           return (
             <div
               key={post.id}
-              className="bg-white dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
+              className="bg-white/80 dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
             >
               {/* HEADER */}
 
@@ -1308,10 +1479,10 @@ ${post.likes_count || 0} likes
                       post.profile_image
                     }
                     alt=""
-                    className="w-12 h-12 rounded-full object-cover"
+                    className="h-12 w-12 rounded-full object-cover ring-2 ring-purple-800 active:scale-95 transition"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm"
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm ring-2 ring-purple-00 active:scale-95 transition"
                   >
                     {(
                       post.profile_name ||
@@ -1323,7 +1494,7 @@ ${post.likes_count || 0} likes
                 )}
 
                 <div className="flex-1">
-                  <h3 className="font-semibold text-sm text-gray-900 dark:text-white"
+                  <h3 className="font-semibold text-sm text-purple-900 dark:text-purple-400 cursor-pointer hover:underline"
                     onClick={() =>
                       openProfileModal({
                         profile_name: "Emzy",

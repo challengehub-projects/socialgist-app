@@ -30,6 +30,7 @@ import {
   Settings,
   RefreshCcw,
   LogOut,
+  ChevronDown
 } from "lucide-react";
 
 /* import {
@@ -106,6 +107,9 @@ export default function TopNavbar({
 
   const [posts, setPosts] =
     useState([]);
+
+  const [category, setCategory] = useState("all");
+  const [showCategory, setShowCategory] = useState(false);
 
   const openProfileModal = (post) => {
     setSelectedProfile(post);
@@ -665,32 +669,46 @@ export default function TopNavbar({
 
       // ================= PAYLOAD =================
 
+      /*     const payload = {
+    
+            user_id:
+              userData.user.id,
+    
+            profile_name:
+              userData.user
+                .user_metadata
+                ?.full_name ||
+              "Anonymous",
+    
+            profile_image:
+              userData.user
+                .user_metadata
+                ?.avatar_url ||
+              "",
+    
+            type: image
+              ? "image_post"
+              : "text_post",
+    
+            description,
+    
+            image:
+              uploadedImage,
+    
+            content: {
+              background,
+              layers,
+            },
+          }; */
+
       const payload = {
-
-        user_id:
-          userData.user.id,
-
-        profile_name:
-          userData.user
-            .user_metadata
-            ?.full_name ||
-          "Anonymous",
-
-        profile_image:
-          userData.user
-            .user_metadata
-            ?.avatar_url ||
-          "",
-
-        type: image
-          ? "image_post"
-          : "text_post",
-
+        user_id: userData.user.id,
+        profile_name: userData.user.user_metadata?.full_name || "Anonymous",
+        profile_image: userData.user.user_metadata?.avatar_url || "",
+        type: image ? "image_post" : "text_post",
         description,
-
-        image:
-          uploadedImage,
-
+        image: uploadedImage,
+        category,   // 👈 ADD THIS
         content: {
           background,
           layers,
@@ -1019,143 +1037,80 @@ export default function TopNavbar({
 
       </header>
 
-      {
-        showProfileMenu && (
-
+      {showProfileMenu && (
+        <>
+          {/* BACKDROP (prevents clicking + keeps it stable) */}
           <div
-            onClick={(e) =>
-              e.stopPropagation()
-            }
-            className="absolute top-16 left-4 w-72 rounded-3xl bg-white dark:bg-[#18191a] shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden z-[99999]"
+            className="fixed inset-0 z-[99998]"
+            onClick={() => setShowProfileMenu(false)}
+          />
+
+          {/* MENU */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="fixed top-16 left-4 w-72 rounded-3xl bg-white dark:bg-[#18191a] shadow-2xl border border-gray-200 dark:border-white/10 overflow-hidden z-[99999]"
           >
-
             {/* PROFILE */}
-
             <button
               onClick={() => {
-
-                setShowProfileMenu(
-                  false
-                );
-
-                onNavigate?.(
-                  "profile"
-                );
-
+                setShowProfileMenu(false);
+                onNavigate?.("profile");
               }}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition"
             >
-
               <div className="h-11 w-11 rounded-full bg-purple-600 flex items-center justify-center text-white">
-
                 <User size={20} />
-
               </div>
 
               <div className="text-left">
-
-                <p className="font-bold dark:text-white">
-
-                  Profile
-
-                </p>
-
-                <p className="text-xs text-gray-500">
-
-                  View your profile
-
-                </p>
-
+                <p className="font-bold dark:text-white">Profile</p>
+                <p className="text-xs text-gray-500">View your profile</p>
               </div>
-
             </button>
 
             {/* SETTINGS */}
-
             <button
               onClick={() => {
-
-                setShowProfileMenu(
-                  false
-                );
-
-                onNavigate?.(
-                  "settings"
-                );
-
+                setShowProfileMenu(false);
+                onNavigate?.("settings");
               }}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition dark:text-white"
             >
-
-              <Settings
-                size={20}
-              />
-
-              <span>
-                Settings
-              </span>
-
+              <Settings size={20} />
+              <span>Settings</span>
             </button>
 
             {/* SWITCH ACCOUNT */}
-
             <button
               onClick={() => {
-
-                setShowProfileMenu(
-                  false
-                );
-
-                onNavigate?.(
-                  "switch-account"
-                );
-
+                setShowProfileMenu(false);
+                onNavigate?.("switch-account");
               }}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-100 dark:hover:bg-white/5 transition dark:text-white"
             >
-
-              <RefreshCcw
-                size={20}
-              />
-
-              <span>
-                Switch Account
-              </span>
-
+              <RefreshCcw size={20} />
+              <span>Switch Account</span>
             </button>
 
             {/* LOGOUT */}
-
             <button
               onClick={async () => {
-
                 await supabase.auth.signOut();
-
                 window.location.reload();
-
               }}
               className="w-full flex items-center gap-4 px-5 py-4 hover:bg-red-50 dark:hover:bg-red-500/10 text-red-500 transition"
             >
-
-              <LogOut
-                size={20}
-              />
-
-              <span>
-                Logout
-              </span>
-
+              <LogOut size={20} />
+              <span>Logout</span>
             </button>
-
           </div>
-
-        )
-      }
+        </>
+      )}
 
       {/* ================= CREATE MODAL ================= */}
 
       {showCreateModal && (
-        <div className="fixed inset-0 z-[999] bg-black flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[999] bg-black flex flex-col overflow-visible">
 
           {/* TOP */}
 
@@ -1223,6 +1178,58 @@ export default function TopNavbar({
               className="w-full bg-transparent text-white placeholder:text-gray-400 outline-none resize-none text-base"
             />
 
+          </div>
+
+          {/* CATEGORY SELECT (PROFESSIONAL ICON STYLE) */}
+          <div className="px-4 py-3 border-b border-white/10 bg-black/30 backdrop-blur-xl relative z-50">
+
+            <div className="flex items-center justify-between">
+
+              <p className="text-xs text-gray-400">
+                Post Category
+              </p>
+
+              <button
+                onClick={() => setShowCategory((p) => !p)}
+                className="flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 text-white text-sm active:scale-95 transition"
+              >
+                <Sparkles size={14} />
+
+                <span className="capitalize font-semibold">
+                  {category}
+                </span>
+
+                <ChevronDown size={14} />
+              </button>
+
+            </div>
+
+            {showCategory && (
+              <div className="absolute left-4 right-4 mt-3 bg-black border border-white/10 rounded-2xl overflow-hidden shadow-2xl z-[9999]">
+
+                {[
+                  { label: "All", icon: "🌐" },
+                  { label: "Sports", icon: "🏀" },
+                  { label: "Memes", icon: "😂" },
+                  { label: "Dating", icon: "❤️" },
+                  { label: "Trading", icon: "📈" },
+                  { label: "Academics", icon: "📚" },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      setCategory(item.label.toLowerCase());
+                      setShowCategory(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-white hover:bg-white/10 transition"
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span className="capitalize">{item.label}</span>
+                  </button>
+                ))}
+
+              </div>
+            )}
           </div>
 
           {/* CANVAS */}
