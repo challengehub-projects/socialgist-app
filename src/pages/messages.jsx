@@ -477,9 +477,6 @@ export default function Messages({
     setLoadingChats(false);
   };
 
-   setLoadingMessages(false);
-
-
   const loadMessages = async (
     conversationId
   ) => {
