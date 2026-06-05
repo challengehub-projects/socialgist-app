@@ -338,9 +338,9 @@ export default function Messages({
         result.conversationId
       );
 
-      setupTyping(
+ /*      setupTyping(
         result.conversationId
-      );
+      ); */
 
     };
 
@@ -477,14 +477,17 @@ export default function Messages({
     setLoadingChats(false);
   };
 
+   setLoadingMessages(false);
+
 
   const loadMessages = async (
     conversationId
   ) => {
 
-    try {
 
-      setLoadingMessages(true); // 👈 ADD THIS AT START
+    setLoadingMessages(true);
+
+    try {
 
 
       // MARK READ FIRST
@@ -601,6 +604,8 @@ export default function Messages({
         err
       );
 
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
