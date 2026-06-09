@@ -59,6 +59,7 @@ export default function Feed({
   const [openProfile, setOpenProfile] =
     useState(false);
 
+
   const [selectedProfile, setSelectedProfile] =
     useState(null);
 
@@ -71,6 +72,8 @@ export default function Feed({
   const [commentText, setCommentText] = useState("");
   const [sending, setSending] = useState(false);
 
+  const [userProfile, setUserProfile] = useState(null);
+
 
 
   const [activePost, setActivePost] = useState(null);
@@ -80,6 +83,13 @@ export default function Feed({
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState(null);
+
+
+  const [page, setPage] = useState(0);
+  const POSTS_PER_PAGE = 5;
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
 
 
   const openComments = async (post) => {
@@ -149,7 +159,10 @@ export default function Feed({
         .eq("id", userId)
         .single();
 
-        console.log(data)
+      console.log(data)
+
+      setProfileData(data);
+
 
       if (error) throw error;
 
@@ -193,10 +206,36 @@ export default function Feed({
   }, [activePost?.id]);
 
 
-  const [page, setPage] = useState(0);
-  const POSTS_PER_PAGE = 5;
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+
+  const getUserProfile = async (userId) => {
+    if (!userId) return null;
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+      if (error) throw error;
+
+      return data;
+    } catch (err) {
+      console.error("Profile fetch error:", err.message);
+      return null;
+    }
+  };
+
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const profile = await getUserProfile(me?.id);
+      console.log(profile);
+    };
+
+    if (me?.id) loadProfile();
+  }, [me?.id]);
+
 
   // ================= TOAST =================
 
@@ -214,18 +253,28 @@ export default function Feed({
 
 
 
+
+
+
   const addCommentToPost = async () => {
     if (!commentText.trim() || !activePost) return;
 
-    console.log(me)
+
+
+    const profile = await getUserProfile(me.id);
+
+    console.log(profile.avatar_url);
 
     const newComment = {
       id: crypto.randomUUID(),
       user: me?.user_metadata.full_name || "Anonymous",
       user_id: me?.id,
+      avatar: profile.avatar_url,
       text: commentText.trim(),
       created_at: new Date().toISOString(),
     };
+
+    /*  console.log(newComment) */
 
     // 1. INSTANT UI UPDATE
     setComments((prev) => [newComment, ...prev]);
@@ -835,34 +884,34 @@ export default function Feed({
           console.log("🔥 FEED UPDATE:", payload);
 
           // =========================
-          // IGNORE NEW POSTS
+          // IGNORE INSERTS (optional)
           // =========================
-          if (payload.eventType === "INSERT") {
-            return;
-          }
+          if (payload.eventType === "INSERT") return;
 
           // =========================
-          // UPDATE POST
+          // UPDATE POSTS IN UI
           // =========================
           if (payload.eventType === "UPDATE") {
-            // Update post counts immediately
             setPosts((prev) =>
               prev.map((post) =>
                 post.id === payload.new.id
                   ? {
                     ...post,
-                    likes_count: payload.new.likes_count,
-                    shares_count: payload.new.shares_count,
-                    comments_count: payload.new.comments_count,
+
+                    // 🔥 CORE COUNTS (IMPORTANT)
+                    likes_count: payload.new.likes_count ?? 0,
+                    comments_count: payload.new.comments_count ?? 0,
+                    shares_count: payload.new.shares_count ?? 0,
+
                     updated_at: payload.new.updated_at,
                   }
                   : post
               )
             );
 
-            // ==================================
+            // =========================
             // LIKE NOTIFICATION
-            // ==================================
+            // =========================
             const oldLikes = payload.old?.likes_count || 0;
             const newLikes = payload.new?.likes_count || 0;
 
@@ -881,13 +930,11 @@ export default function Feed({
                 title: "❤️ New Like",
                 body: "Someone liked your post",
               });
-
-              console.log("❤️ LIKE RECEIVED");
             }
 
-            // ==================================
+            // =========================
             // SHARE NOTIFICATION
-            // ==================================
+            // =========================
             const oldShares = payload.old?.shares_count || 0;
             const newShares = payload.new?.shares_count || 0;
 
@@ -906,13 +953,11 @@ export default function Feed({
                 title: "📤 New Share",
                 body: "Someone shared your post",
               });
-
-              console.log("📤 SHARE RECEIVED");
             }
 
-            // ==================================
+            // =========================
             // COMMENT NOTIFICATION
-            // ==================================
+            // =========================
             const oldComments =
               payload.old?.comments_count || 0;
 
@@ -934,8 +979,6 @@ export default function Feed({
                 title: "💬 New Comment",
                 body: "Someone commented on your post",
               });
-
-              console.log("💬 COMMENT RECEIVED");
             }
 
             return;
@@ -946,9 +989,7 @@ export default function Feed({
           // =========================
           if (payload.eventType === "DELETE") {
             setPosts((prev) =>
-              prev.filter(
-                (post) => post.id !== payload.old.id
-              )
+              prev.filter((post) => post.id !== payload.old.id)
             );
           }
         }
@@ -961,7 +1002,6 @@ export default function Feed({
       supabase.removeChannel(channel);
     };
   }, [me?.id]);
-
   // ================= NETWORK =================
 
   useEffect(() => {
@@ -1059,7 +1099,7 @@ export default function Feed({
       );
   }, [posts, hasMore]);
 
-  // ================= LIKE =================
+
 
   // ================= LIKE POST =================
   const likePost = async (postId) => {
@@ -1222,11 +1262,9 @@ export default function Feed({
   // ================= SHARE =================
 
   const sharePost = async (post) => {
-
     try {
       const caption =
-        post.description ||
-        "Check this post on SocialGist";
+        post.description || "Check this post on SocialGist";
 
       const shareUrl =
         `https://socialgist-app.vercel.app/post/${post.id}`;
@@ -1237,7 +1275,7 @@ export default function Feed({
           .toLowerCase()}`;
 
       // =========================
-      // 1. MOBILE (CAPACITOR)
+      // MOBILE SHARE (CAPACITOR)
       // =========================
       if (Capacitor.getPlatform() !== "web") {
         await share.share({
@@ -1247,11 +1285,16 @@ export default function Feed({
           dialogTitle: "Share Post",
         });
 
+        // increment share count
+        await supabase.rpc("increment_shares", {
+          post_id: post.id,
+        });
+
         return;
       }
 
       // =========================
-      // 2. WEB SHARE API (if available)
+      // WEB SHARE API
       // =========================
       if (navigator.share) {
         await navigator.share({
@@ -1260,61 +1303,121 @@ export default function Feed({
           url: shareUrl,
         });
 
+        await supabase.rpc("increment_shares", {
+          post_id: post.id,
+        });
+
         return;
       }
 
       // =========================
-      // 3. FALLBACK → GENERATE IMAGE SHARE (TikTok style)
+      // 🔥 TIKTOK STYLE IMAGE SHARE
       // =========================
 
       const node = document.createElement("div");
 
       node.style.width = "1080px";
       node.style.height = "1920px";
-      node.style.padding = "60px";
-      node.style.background =
-        post.image
-          ? `url(${post.image}) center/cover no-repeat`
-          : "linear-gradient(135deg,#6d28d9,#ec4899,#ef4444)";
-      node.style.color = "white";
-      node.style.display = "flex";
-      node.style.flexDirection = "column";
-      node.style.justifyContent = "space-between";
+      node.style.position = "relative";
+      node.style.overflow = "hidden";
       node.style.fontFamily = "Arial";
+      node.style.color = "white";
+
+      node.style.background = post.image
+        ? `url(${post.image}) center/cover no-repeat`
+        : "linear-gradient(135deg,#6d28d9,#ec4899,#ef4444)";
 
       node.innerHTML = `
-      <div>
-        <h1 style="font-size:60px;font-weight:900;">
-          SocialGist
-        </h1>
+      <div style="
+        position:absolute;
+        inset:0;
+        background:linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.2));
+      "></div>
+
+      <div style="
+        position:absolute;
+        top:60px;
+        left:60px;
+        font-size:55px;
+        font-weight:900;
+      ">
+        SocialGist
       </div>
 
-      <div>
-        <h2 style="font-size:70px;font-weight:900;line-height:1.2;">
+      <div style="
+        position:absolute;
+        bottom:420px;
+        left:60px;
+        right:60px;
+      ">
+        <div style="
+          font-size:72px;
+          font-weight:900;
+          line-height:1.2;
+          word-wrap:break-word;
+        ">
           ${caption}
-        </h2>
+        </div>
 
-        <p style="font-size:40px;margin-top:20px;">
+        <div style="
+          margin-top:20px;
+          font-size:40px;
+          opacity:0.9;
+        ">
           ${username}
-        </p>
+        </div>
       </div>
 
-      <div style="font-size:35px;opacity:0.9;">
-        ❤️ ${post.likes_count || 0} likes • SocialGist
+      <div style="
+        position:absolute;
+        bottom:80px;
+        left:60px;
+        right:60px;
+        display:flex;
+        justify-content:space-between;
+        font-size:38px;
+        background:rgba(0,0,0,0.4);
+        padding:25px 30px;
+        border-radius:25px;
+        backdrop-filter:blur(10px);
+      ">
+        <div>❤️ ${post.likes_count || 0}</div>
+        <div>💬 ${post.comments_count || 0}</div>
+        <div>🔁 ${post.shares_count || 0}</div>
+      </div>
+
+      <div style="
+        position:absolute;
+        bottom:20px;
+        right:60px;
+        font-size:28px;
+        opacity:0.7;
+      ">
+        socialgist.app
       </div>
     `;
 
       document.body.appendChild(node);
 
-      const dataUrl = await toPng(node);
+      const dataUrl = await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 2,
+      });
 
       document.body.removeChild(node);
 
-      // download image OR share it
       const link = document.createElement("a");
       link.href = dataUrl;
       link.download = "socialgist-post.png";
       link.click();
+
+      // =========================
+      // FINAL SHARE COUNT UPDATE
+      // =========================
+      await supabase.rpc("increment_shares", {
+        post_id: post.id,
+      });
+
     } catch (err) {
       console.log("Share error:", err);
     }
@@ -1638,94 +1741,84 @@ export default function Feed({
                 )
               }
 
-              {/* IMAGE */}
+              {/* IMAGE / MEDIA */}
+              {post.image && (
+                <div className="relative w-full overflow-hidden bg-black rounded-2xl">
 
-              {
-                post.image && (
-                  <div className="relative overflow-hidden bg-black -mx-4">
-                    <img
-                      src={
-                        post.cached_image ||
-                        post.image
-                      }
-                      alt=""
-                      className="w-full max-w-2xl mx-auto sm:p-4"
-                    />
+                  {/* IMAGE */}
+                  <img
+                    src={post.cached_image || post.image}
+                    alt=""
+                    className="w-full max-h-[500px] object-cover"
+                  />
 
-                    {parsed?.layers?.map(
-                      (layer) => (
-                        <div
-                          key={layer.id}
-                          className="absolute font-black w-full"
-                          style={{
-                            left:
-                              layer.x,
-                            top: layer.y,
-                            color:
-                              layer.color,
-                            fontSize:
-                              layer.fontSize,
-                            textShadow:
-                              "none",
-                          }}
-                        >
-                          {layer.text}
-                        </div>
-                      )
-                    )}
-                  </div>
-                )
-              }
-              {
-                !post.image &&
-                parsed?.background && (
-                  <div
-                    className="relative min-h-[280px] flex items-center justify-center overflow-hidden p-8"
-                    style={{
-                      background: parsed.background,
-                    }}
-                  >
-                    {parsed?.text ? (
+                  {/* TEXT LAYERS */}
+                  {parsed?.layers?.map((layer) => (
+                    <div
+                      key={layer.id}
+                      className="absolute px-2 py-1 rounded-md font-bold break-words max-w-[90%]"
+                      style={{
+                        left: layer.x,
+                        top: layer.y,
+                        color: layer.color,
+                        fontSize: layer.fontSize,
+                        textShadow: "0 2px 6px rgba(0,0,0,0.6)",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {layer.text}
+                    </div>
+                  ))}
+
+                </div>
+              )}
+
+              {/* TEXT ONLY POST */}
+              {!post.image && parsed?.background && (
+                <div
+                  className="relative w-full min-h-[280px] flex items-center justify-center px-6 py-10 overflow-hidden rounded-2xl"
+                  style={{ background: parsed.background }}
+                >
+
+                  {/* CENTER TEXT */}
+                  {parsed?.text && (
+                    <div
+                      className="
+          text-white
+          text-center
+          font-extrabold
+          text-2xl
+          sm:text-3xl
+          leading-snug
+          whitespace-pre-wrap
+          break-words
+          max-w-[90%]
+        "
+                    >
+                      {parsed.text}
+                    </div>
+                  )}
+
+                  {/* LAYER MODE (IMPROVED) */}
+                  {!parsed?.text &&
+                    parsed?.layers?.map((layer) => (
                       <div
-                        className="
-            text-white
-            text-center
-            font-black
-            text-3xl
-            sm:text-4xl
-            whitespace-pre-wrap
-            break-words
-            w-full
-          "
+                        key={layer.id}
+                        className="absolute px-2 py-1 max-w-[85%] font-bold break-words"
                         style={{
-                          textShadow:
-                            "none",
+                          left: layer.x,
+                          top: layer.y,
+                          color: layer.color,
+                          fontSize: layer.fontSize,
+                          textShadow: "0 2px 6px rgba(0,0,0,0.6)",
+                          whiteSpace: "pre-wrap",
                         }}
                       >
-                        {parsed.text}
+                        {layer.text}
                       </div>
-                    ) : (
-                      parsed?.layers?.map(
-                        (layer) => (
-                          <div
-                            key={layer.id}
-                            className="absolute font-black"
-                            style={{
-                              left: layer.x,
-                              top: layer.y,
-                              color: layer.color,
-                              fontSize: layer.fontSize,
-                              textShadow:
-                                "none",
-                            }}
-                          >
-                            {layer.text}
-                          </div>
-                        )
-                      )
-                    )}
-                  </div>
-                )
+                    ))}
+                </div>
+              )
               }
               {/* ACTIONS */}
 
@@ -1753,21 +1846,21 @@ export default function Feed({
 
                     {/* COMMENTS (no icon) */}
                     <div className="flex items-center gap-1">
-                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                        Comments:
-                      </span>
                       <span className="text-sm font-semibold text-gray-900 dark:text-white">
                         {post.comments_count || 0}
+                      </span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        comments
                       </span>
                     </div>
 
                     {/* SHARES (no icon) */}
                     <div className="flex items-center gap-1">
-                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                        Shares:
-                      </span>
                       <span className="text-sm font-semibold text-gray-900 dark:text-white">
                         {post.shares_count || 0}
+                      </span>
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        shares
                       </span>
                     </div>
 
@@ -1976,10 +2069,19 @@ export default function Feed({
                       key={c.id}
                       className="flex gap-3 py-3 border-b border-gray-100 last:border-none"
                     >
-
                       {/* USER AVATAR */}
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center font-semibold text-sm">
-                        {(c.user || "U")[0].toUpperCase()}
+                      <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center font-semibold text-sm"
+                        onClick={() => openUserProfile(activePost.user_id)}
+                      >
+                        {c.avatar ? (
+                          <img
+                            src={c.avatar}
+                            alt={c.user}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          (c.user?.[0] || "U").toUpperCase()
+                        )}
                       </div>
 
                       <div className="flex-1">
@@ -2060,6 +2162,18 @@ export default function Feed({
           </div>
         )}
 
+        <ProfileModal
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          profile={profileData}
+          isFollowing={false}
+          onFollowToggle={(profile) => {
+            console.log("Follow:", profile);
+          }}
+          onNavigate={(type, profile) => {
+            console.log(type, profile);
+          }}
+        />
 
       </div>
     </div >

@@ -1,6 +1,6 @@
 // ProfileModal.jsx
 
-import React, { useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   MessageCircle,
@@ -8,7 +8,10 @@ import {
   ChevronRight,
   UserPlus,
   UserCheck,
+  UserCircle,
 } from "lucide-react";
+
+
 
 export default function ProfileModal({
   open,
@@ -18,6 +21,11 @@ export default function ProfileModal({
   isFollowing = false,
   onFollowToggle,
 }) {
+
+  const [imageOpen, setImageOpen] = useState(false);
+  const [zoom, setZoom] = useState(1);
+
+
   // ESC CLOSE
   useEffect(() => {
     const handleKey = (e) => {
@@ -31,7 +39,7 @@ export default function ProfileModal({
   if (!open) return null;
 
   const username =
-    profile?.profile_name
+    profile?.full_name
       ?.replace(/\s+/g, "")
       .toLowerCase() || "user";
 
@@ -41,7 +49,7 @@ export default function ProfileModal({
       {/* BACKDROP */}
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-md"
+        className="absolute inset-0 bg-black/70 backdrop-blur-md profile-backdrop"
       />
 
       {/* SHEET */}
@@ -56,124 +64,182 @@ export default function ProfileModal({
         </div>
 
         {/* CLOSE */}
-        <div className="absolute top-4 right-4 z-30">
+        <div className="absolute top-6 right-5 z-[99999]">
           <button
             onClick={onClose}
-            className="h-11 w-11 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl flex items-center justify-center text-white active:scale-95 transition"
+            className="
+      h-11
+      w-11
+      rounded-full
+      bg-purple-600
+      text-white
+      shadow-lg
+      flex
+      items-center
+      justify-center
+      active:scale-95
+      transition
+    "
           >
             <X size={20} />
           </button>
         </div>
 
         {/* CONTENT */}
-        <div className="relative z-20 flex-1 overflow-y-auto px-6 pt-10 pb-10 flex flex-col items-center text-center">
+        <div className="relative flex-1 overflow-y-auto bg-white rounded-t-[40px] px-6 pt-8 pb-10 profile-content">
 
-          {/* AVATAR */}
-          {profile?.profile_image ? (
-            <img
-              src={profile.profile_image}
-              alt={profile.profile_name || "User"}
-              className="w-36 h-36 rounded-full object-cover border-4 border-white shadow-[0_10px_40px_rgba(255,255,255,0.25)]"
-            />
+          {!profile ? (
+            <div className="animate-pulse">
+
+              <div className="flex justify-center">
+                <div className="w-32 h-32 rounded-full bg-gray-200" />
+              </div>
+
+              <div className="mt-6 h-8 w-48 mx-auto rounded bg-gray-200" />
+              <div className="mt-3 h-4 w-28 mx-auto rounded bg-gray-100" />
+
+              <div className="mt-6 space-y-3">
+                <div className="h-4 bg-gray-100 rounded" />
+                <div className="h-4 bg-gray-100 rounded w-5/6 mx-auto" />
+              </div>
+
+              <div className="mt-8 grid grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-20 rounded-2xl bg-gray-100"
+                  />
+                ))}
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <div className="flex-1 h-14 rounded-2xl bg-gray-200" />
+                <div className="flex-1 h-14 rounded-2xl bg-gray-100" />
+              </div>
+
+            </div>
           ) : (
-            <div className="w-36 h-36 rounded-full bg-white/15 border-4 border-white flex items-center justify-center text-white text-6xl font-black shadow-2xl">
-              {(profile?.profile_name || "U").charAt(0).toUpperCase()}
-            </div>
-          )}
+            <>
+              {/* AVATAR */}
+              <div className="flex justify-center">
+                {profile?.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.full_name}
+                    onClick={() => {
+                       setZoom(1);
+                       setImageOpen(true)
+                    }}
+                    className="w-32 h-32 rounded-full object-cover border-4 border-purple-100 shadow-xl cursor-pointer"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-full bg-purple-600 flex items-center justify-center text-white text-5xl font-bold">
+                    {(profile?.full_name || "U")[0]}
+                  </div>
+                )}
+              </div>
 
-          {/* NAME */}
-          <h1 className="mt-6 text-4xl font-black text-white break-words">
-            {profile?.profile_name || "Anonymous User"}
-          </h1>
+              {/* NAME */}
+              <h1 className="mt-6 text-center text-3xl font-bold text-gray-900">
+                {profile?.full_name || "Anonymous User"}
+              </h1>
 
-          {/* USERNAME */}
-          <p className="text-white/70 text-sm mt-2">
-            @{username}
-          </p>
-
-          {/* BIO */}
-          <p className="text-white/85 text-sm mt-6 max-w-sm leading-relaxed">
-            {profile?.bio ||
-              "This user hasn’t added a bio yet."}
-          </p>
-
-          {/* STATS CARD */}
-          <div className="w-full mt-8 rounded-[32px] bg-white/10 border border-white/10 backdrop-blur-2xl p-6 text-left">
-
-            <div className="flex items-center gap-2 text-white mb-4">
-              <User2 size={18} />
-              <span className="font-black text-lg">
-                About
-              </span>
-            </div>
-
-            <div className="text-white/85 text-sm space-y-2">
-              <p>
-                Posts:{" "}
-                <span className="font-bold">
-                  {profile?.posts ?? 0}
-                </span>
+              {/* USERNAME */}
+              <p className="text-center text-gray-500 mt-2">
+                @{username}
               </p>
 
-              <p>
-                Followers:{" "}
-                <span className="font-bold">
-                  {profile?.followers ?? 0}
-                </span>
+              {/* BIO */}
+              <p className="text-center text-gray-600 mt-5 leading-relaxed max-w-md mx-auto">
+                {profile?.bio || "No bio yet."}
               </p>
 
-              <p>
-                Following:{" "}
-                <span className="font-bold">
-                  {profile?.following ?? 0}
-                </span>
-              </p>
-            </div>
-          </div>
+              {/* STATS */}
+              <div className="grid grid-cols-3 gap-3 mt-8">
 
-          {/* ACTIONS */}
-          <div className="w-full flex items-center gap-4 mt-8">
+                <div className="bg-purple-50 rounded-3xl p-4 text-center">
+                  <div className="font-bold text-2xl text-purple-700">
+                    {profile?.posts || 0}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Posts
+                  </div>
+                </div>
 
-            {/* MESSAGE */}
-            <button
-              onClick={() =>
-                onNavigate?.("messages", profile)
-              }
-              className="flex-1 h-16 rounded-3xl bg-white text-purple-700 font-black flex items-center justify-center gap-3 shadow-2xl active:scale-95 transition"
-            >
-              <MessageCircle size={22} />
-              <span>Message</span>
-            </button>
+                <div className="bg-purple-50 rounded-3xl p-4 text-center">
+                  <div className="font-bold text-2xl text-purple-700">
+                    {profile?.followers || 0}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Followers
+                  </div>
+                </div>
 
-            {/* FOLLOW */}
-            <button
-              onClick={() => onFollowToggle?.(profile)}
-              className="flex-1 h-16 rounded-3xl bg-black/20 border border-white/10 backdrop-blur-2xl text-white font-black flex items-center justify-center gap-3 active:scale-95 transition"
-            >
-              {isFollowing ? (
-                <>
-                  <UserCheck size={22} />
-                  <span>Following</span>
-                </>
-              ) : (
-                <>
-                  <UserPlus size={22} />
-                  <span>Follow</span>
-                </>
+                <div className="bg-purple-50 rounded-3xl p-4 text-center">
+                  <div className="font-bold text-2xl text-purple-700">
+                    {profile?.following || 0}
+                  </div>
+                  <div className="text-sm text-gray-500">
+                    Following
+                  </div>
+                </div>
+
+              </div>
+
+              {/* BUTTONS */}
+              <div className="flex gap-3 mt-8">
+
+                <button
+                  onClick={() => onFollowToggle?.(profile)}
+                  className="flex-1 h-14 rounded-2xl bg-purple-600 text-white font-semibold shadow-lg active:scale-95 transition"
+                >
+                  {isFollowing ? "Following" : "Follow"}
+                </button>
+
+                <button
+                  onClick={() =>
+                    onNavigate?.("profile", profile)
+                  }
+                  className="flex-1 h-14 rounded-2xl border-2 border-purple-200 text-purple-700 font-semibold active:scale-95 transition"
+                >
+                  View Profile
+                </button>
+
+              </div>
+
+              {imageOpen && (
+                <div className="fixed inset-0 z-[999999] bg-black flex items-center justify-center overflow-hidden">
+
+                  {/* BACKDROP CLOSE */}
+                  <div
+                    className="absolute inset-0"
+                    onClick={() => setImageOpen(false)}
+                  />
+
+                  {/* ZOOMABLE IMAGE */}
+                  <img
+                    src={profile?.avatar_url}
+                    alt="full"
+                    onClick={() => setZoom((z) => Math.min(z + 0.3, 3))}
+                    style={{
+                      transform: `scale(${zoom})`,
+                      transition: "transform 0.25s ease",
+                    }}
+                    className="w-full h-full object-cover cursor-zoom-in select-none"
+                  />
+
+                  {/* CLOSE BUTTON */}
+                  <button
+                    onClick={() => setImageOpen(false)}
+                    className="absolute top-5 right-5 bg-white text-black w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-lg"
+                  >
+                    ✕
+                  </button>
+
+                </div>
               )}
-            </button>
-          </div>
-
-          {/* VIEW FULL PROFILE */}
-          <button
-            onClick={() => onNavigate?.("profile", profile)}
-            className="mt-6 flex items-center gap-2 text-white/80 hover:text-white transition active:scale-95"
-          >
-            <span className="font-semibold">
-              View full profile
-            </span>
-            <ChevronRight size={18} />
-          </button>
+            </>
+          )}
         </div>
       </div>
     </div>
