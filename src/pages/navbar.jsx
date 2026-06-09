@@ -51,6 +51,8 @@ import ProfileModal from "./profileModal";
 
 
 
+
+
 export default function TopNavbar({
   darkMode,
   toggleDarkMode,
@@ -110,6 +112,8 @@ export default function TopNavbar({
 
   const [category, setCategory] = useState("all");
   const [showCategory, setShowCategory] = useState(false);
+
+  const [avatar, setAvatar] = useState("");
 
   const openProfileModal = (post) => {
     setSelectedProfile(post);
@@ -187,6 +191,18 @@ export default function TopNavbar({
         closeMenu
       );
 
+  }, []);
+
+  useEffect(() => {
+    const loadAvatar = async () => {
+      const url = await getProfilePicture();
+
+      if (url) {
+        setAvatar(url);
+      }
+    };
+
+    loadAvatar();
   }, []);
 
   useEffect(() => {
@@ -340,6 +356,27 @@ export default function TopNavbar({
       key: "offline_posts",
       value: JSON.stringify(posts),
     });
+  };
+
+  const getProfilePicture = async () => {
+    const { data: authData } = await supabase.auth.getUser();
+
+    const userId = authData?.user?.id;
+
+    if (!userId) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error(error);
+      return null;
+    }
+
+    return data?.avatar_url;
   };
 
   // ================= ICON BTN =================
@@ -882,11 +919,14 @@ export default function TopNavbar({
             }}
           >
 
-            <img
-              src="https://i.pravatar.cc/150?img=12"
-              alt=""
-              className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500 active:scale-95 transition"
-            />
+  <img
+  src={
+    avatar ||
+    "https://ui-avatars.com/api/?name=User"
+  }
+  alt=""
+  className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500 active:scale-95 transition"
+/>
 
             <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 border-2 border-white rounded-full animate-pulse" />
 

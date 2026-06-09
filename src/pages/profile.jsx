@@ -1,394 +1,416 @@
-import React, { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../configs/supbase";
+import { FiEdit2, FiCheck, FiCamera, FiRefreshCw, FiArrowLeft } from "react-icons/fi";
+import { nanoid } from "nanoid";
 
-import {
-Camera,
-Edit3,
-Link,
-MapPin,
-Briefcase,
-ArrowLeft,
-Heart,
-GraduationCap,
-Cake,
-Users,
-Globe,
-Calendar,
-Share2,
-} from "lucide-react";
+export default function ProfilePage() {
+  const [profile, setProfile] = useState(null);
+  const [editing, setEditing] = useState({});
+  const [loading, setLoading] = useState(true);
 
-export default function ProfilePage({
-onNavigate,
-}) {
-const [activeTab, setActiveTab] =
-useState("posts");
+  // FETCH PROFILE
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
 
-const posts = [
-{
-id: 1,
-content:
-"Still building SocialGist. One day this will be everywhere 🔥",
-time: "2h",
-},
-{
-id: 2,
-content:
-"Campus WiFi still acting like it's on strike 😭",
-time: "1d",
-},
-];
+      if (!userId) return;
 
-const user = {
-name: "Prince",
-username: "@socialgist",
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
 
-bio: "Building SocialGist • Computer Science Student • Love tech, memes & campus gist 💜",
+      if (!error) {
+        let updated = { ...data };
 
-location: "Imo State, Nigeria",
-work: "Student Developer",
-website: "socialgist.app",
+        // AUTO USERNAME GENERATOR
+        if (!updated.username) {
+          updated.username = "user_" + nanoid(6);
 
-age: 22,
-department:
-  "Computer Science",
-school:
-  "Federal University of Technology",
-relationship: "Single",
-hobby:
-  "Coding, Football, Gaming",
-joined: "January 2026",
+          await supabase
+            .from("profiles")
+            .update({ username: updated.username })
+            .eq("id", userId);
+        }
 
-followers: 2400,
-following: 180,
-posts: posts.length,
+        setProfile(updated);
+      }
 
-avatar:
-  "https://i.pravatar.cc/150?img=12",
+      setLoading(false);
+    };
 
-cover:
-  "https://images.unsplash.com/photo-1503264116251-35a269479413?w=1200",
+    fetchProfile();
+  }, []);
 
-};
 
-return ( <div className="min-h-screen bg-gray-100">
+  useEffect(() => {
+  const fetchProfile = async () => {
 
-  {/* TOP BAR */}
+    const cached = sessionStorage.getItem("profile");
 
-  <div className="sticky top-0 z-50 bg-white shadow-sm">
+    if (cached) {
+      setProfile(JSON.parse(cached));
+      setLoading(false);
+      return;
+    }
 
-    <div className="max-w-5xl mx-auto h-16 px-4 flex items-center gap-4">
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+
+    if (!error && data) {
+      setProfile(data);
+
+      sessionStorage.setItem(
+        "profile",
+        JSON.stringify(data)
+      );
+    }
+
+    setLoading(false);
+  };
+
+  fetchProfile();
+}, []);
+
+
+  // UPDATE FIELD
+  const updateField = async (field, value) => {
+    const { data: authData } = await supabase.auth.getUser();
+    const userId = authData?.user?.id;
+
+    const updated = { ...profile, [field]: value };
+    setProfile(updated);
+
+    await supabase
+      .from("profiles")
+      .update({ [field]: value, updated_at: new Date() })
+      .eq("id", userId);
+  };
+
+  const toggleEdit = (field) => {
+    setEditing((prev) => ({ ...prev, [field]: !prev[field] }));
+  };
+
+  const compressImage = (file, maxWidth = 600, quality = 0.7) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const reader = new FileReader();
+
+      reader.readAsDataURL(file);
+
+      reader.onload = (e) => {
+        img.src = e.target.result;
+      };
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            const compressedFile = new File(
+              [blob],
+              file.name.replace(/\.\w+$/, ".jpg"),
+              {
+                type: "image/jpeg",
+              }
+            );
+
+            resolve(compressedFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      };
+    });
+  };
+
+  // UPLOAD AVATAR
+  const uploadAvatar = async (file) => {
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+
+      if (!userId || !file) return;
+
+      // COMPRESS IMAGE
+      const compressedFile = await compressImage(
+        file,
+        600, // max width
+        0.7 // quality
+      );
+
+      const fileName = `${userId}/${Date.now()}.jpg`;
+
+      const { error } = await supabase.storage
+        .from("profile-images")
+        .upload(fileName, compressedFile, {
+          upsert: true,
+          contentType: "image/jpeg",
+        });
+
+      if (error) {
+        console.error(error);
+        return alert("Upload failed");
+      }
+
+      const { data } = supabase.storage
+        .from("profile-images")
+        .getPublicUrl(fileName);
+
+      const url = data.publicUrl;
+
+      setProfile((prev) => ({
+        ...prev,
+        avatar_url: url,
+      }));
+
+      await supabase
+        .from("profiles")
+        .update({
+          avatar_url: url,
+          updated_at: new Date(),
+        })
+        .eq("id", userId);
+
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const regenerateUsername = async () => {
+    const newName = "user_" + nanoid(6);
+    await updateField("username", newName);
+  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white px-4 py-8">
+        <div className="max-w-xl mx-auto animate-pulse">
+
+          {/* COVER SKELETON */}
+          <div className="h-28 bg-gray-200 rounded-xl"></div>
+
+          {/* AVATAR + NAME */}
+          <div className="flex items-end gap-4 -mt-10 px-3">
+            <div className="w-20 h-20 bg-gray-300 rounded-full border-4 border-white"></div>
+
+            <div className="space-y-2">
+              <div className="h-4 w-32 bg-gray-300 rounded"></div>
+              <div className="h-3 w-24 bg-gray-200 rounded"></div>
+            </div>
+          </div>
+
+          {/* STATS */}
+          <div className="grid grid-cols-3 mt-6 gap-2">
+            <div className="h-14 bg-gray-200 rounded-xl"></div>
+            <div className="h-14 bg-gray-200 rounded-xl"></div>
+            <div className="h-14 bg-gray-200 rounded-xl"></div>
+          </div>
+
+          {/* FIELDS */}
+          <div className="mt-6 space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-12 bg-gray-200 rounded-lg"
+              ></div>
+            ))}
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-white text-red-500">
+        No profile found
+      </div>
+    );
+  }
+
+  const Field = ({ label, value, field }) => (
+    <div className="flex items-center justify-between py-3 border-b border-gray-200">
+      <div className="w-full">
+        <p className="text-xs text-gray-400 uppercase">{label}</p>
+
+        {editing[field] ? (
+          <input
+            className="w-full mt-1 border border-gray-300 px-2 py-1 rounded text-black outline-none"
+            defaultValue={value || ""}
+            onBlur={(e) => {
+              updateField(field, e.target.value);
+              toggleEdit(field);
+            }}
+            autoFocus
+          />
+        ) : (
+          <p className="text-sm text-gray-900 mt-1">
+            {value || "Not set"}
+          </p>
+        )}
+      </div>
 
       <button
-        onClick={() =>
-          onNavigate("feed")
-        }
-        className="h-10 w-10 rounded-full hover:bg-gray-100 flex items-center justify-center"
+        onClick={() => toggleEdit(field)}
+        className="text-gray-500 hover:text-black"
       >
-        <ArrowLeft className="h-5 w-5" />
+        {editing[field] ? <FiCheck /> : <FiEdit2 />}
       </button>
-
-      <div>
-
-        <h2 className="font-bold">
-          {user.name}
-        </h2>
-
-        <p className="text-xs text-gray-500">
-          {user.posts} Posts
-        </p>
-
-      </div>
-
     </div>
+  );
 
-  </div>
+  return (
+    
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 via-white to-gray-100 text-black px-4 py-10">
+      <div className="max-w-xl mx-auto">
+        <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-100 mb-4">
 
-  {/* COVER */}
+  <div className="h-14 flex items-center gap-3 px-2">
 
-  <div className="relative h-64 md:h-80">
-
-    <img
-      src={user.cover}
-      alt=""
-      className="w-full h-full object-cover"
-    />
-
-    <button className="absolute bottom-4 right-4 bg-black/50 text-white p-3 rounded-full">
-      <Camera className="h-5 w-5" />
+    <button
+      onClick={() => navigate(-1)}
+      className="
+        h-9
+        w-9
+        rounded-full
+        hover:bg-gray-100
+        flex
+        items-center
+        justify-center
+        transition
+      "
+    >
+      <FiArrowLeft size={20} />
     </button>
 
-  </div>
+    <div>
+      <h1 className="font-semibold">
+        Profile
+      </h1>
 
-  <div className="max-w-5xl mx-auto px-4 pb-10">
-
-    {/* PROFILE */}
-
-    <div className="relative flex flex-col md:flex-row md:justify-between md:items-end">
-
-      <div className="-mt-16 flex items-end gap-4">
-
-        <div className="relative">
-
-          <img
-            src={user.avatar}
-            alt=""
-            className="h-32 w-32 rounded-full border-4 border-white object-cover"
-          />
-
-          <button className="absolute bottom-2 right-2 bg-purple-600 text-white p-2 rounded-full">
-            <Camera className="h-4 w-4" />
-          </button>
-
-        </div>
-
-        <div>
-
-          <h1 className="text-3xl font-bold">
-            {user.name}
-          </h1>
-
-          <p className="text-gray-500">
-            {user.username}
-          </p>
-
-        </div>
-
-      </div>
-
-      <div className="mt-4 flex gap-2">
-
-        <button className="bg-purple-600 text-white px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
-          <Edit3 className="h-4 w-4" />
-          Edit Profile
-        </button>
-
-        <button className="bg-white border px-5 py-3 rounded-xl font-semibold flex items-center gap-2">
-          <Share2 className="h-4 w-4" />
-          Share
-        </button>
-
-      </div>
-
-    </div>
-
-    {/* STATS */}
-
-    <div className="mt-6 bg-white rounded-3xl p-5 shadow-sm grid grid-cols-3 text-center">
-
-      <div>
-        <h3 className="font-black text-xl">
-          {user.posts}
-        </h3>
-        <p className="text-xs text-gray-500">
-          Posts
-        </p>
-      </div>
-
-      <div>
-        <h3 className="font-black text-xl">
-          {user.followers}
-        </h3>
-        <p className="text-xs text-gray-500">
-          Followers
-        </p>
-      </div>
-
-      <div>
-        <h3 className="font-black text-xl">
-          {user.following}
-        </h3>
-        <p className="text-xs text-gray-500">
-          Following
-        </p>
-      </div>
-
-    </div>
-
-    {/* ABOUT */}
-
-    <div className="mt-4 bg-white rounded-3xl p-6 shadow-sm">
-
-      <h2 className="font-bold text-lg mb-4">
-        About Me
-      </h2>
-
-      <p className="text-gray-700 mb-5">
-        {user.bio}
+      <p className="text-xs text-gray-500">
+        @{profile?.username}
       </p>
-
-      <div className="space-y-3">
-
-        <div className="flex items-center gap-3">
-          <MapPin size={16} />
-          {user.location}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Briefcase size={16} />
-          {user.work}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <GraduationCap size={16} />
-          {user.department}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Cake size={16} />
-          {user.age} Years Old
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Heart size={16} />
-          {user.relationship}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Users size={16} />
-          {user.hobby}
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Calendar size={16} />
-          Joined {user.joined}
-        </div>
-
-        <div className="flex items-center gap-3 text-purple-600">
-          <Globe size={16} />
-          {user.website}
-        </div>
-
-      </div>
-
-    </div>
-
-    {/* SOCIALGIST ACTIVITY */}
-
-    <div className="mt-4 bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white rounded-3xl p-6">
-
-      <h2 className="font-bold text-lg mb-4">
-        SocialGist Activity
-      </h2>
-
-      <div className="grid grid-cols-2 gap-4">
-
-        <div className="bg-white/10 rounded-2xl p-4">
-          <div className="text-3xl font-black">
-            {user.posts}
-          </div>
-          <div>Total Posts</div>
-        </div>
-
-        <div className="bg-white/10 rounded-2xl p-4">
-          <div className="text-3xl font-black">
-            {user.followers}
-          </div>
-          <div>Followers</div>
-        </div>
-
-        <div className="bg-white/10 rounded-2xl p-4">
-          <div className="text-3xl font-black">
-            {user.following}
-          </div>
-          <div>Following</div>
-        </div>
-
-        <div className="bg-white/10 rounded-2xl p-4">
-          <div className="text-3xl font-black">
-            🔥
-          </div>
-          <div>Active Member</div>
-        </div>
-
-      </div>
-
-    </div>
-
-    {/* TABS */}
-
-    <div className="mt-6 flex gap-2 bg-white p-2 rounded-2xl">
-
-      {[
-        "posts",
-        "about",
-        "photos",
-      ].map((tab) => (
-
-        <button
-          key={tab}
-          onClick={() =>
-            setActiveTab(tab)
-          }
-          className={`flex-1 py-3 rounded-xl font-semibold ${
-            activeTab === tab
-              ? "bg-purple-600 text-white"
-              : "text-gray-600"
-          }`}
-        >
-          {tab}
-        </button>
-
-      ))}
-
-    </div>
-
-    <div className="mt-6">
-
-      {activeTab === "posts" &&
-        posts.map((p) => (
-
-          <div
-            key={p.id}
-            className="bg-white p-5 rounded-2xl shadow-sm mb-4"
-          >
-
-            <p>
-              {p.content}
-            </p>
-
-            <p className="text-xs text-gray-400 mt-2">
-              {p.time} ago
-            </p>
-
-          </div>
-
-        ))}
-
-      {activeTab === "about" && (
-
-        <div className="bg-white rounded-2xl p-5">
-
-          Full profile information goes here.
-
-        </div>
-
-      )}
-
-      {activeTab === "photos" && (
-
-        <div className="grid grid-cols-2 gap-3">
-
-          {[1, 2, 3, 4].map(
-            (i) => (
-
-              <img
-                key={i}
-                src={`https://picsum.photos/500/500?random=${i}`}
-                alt=""
-                className="rounded-2xl h-40 object-cover w-full"
-              />
-
-            )
-          )}
-
-        </div>
-
-      )}
-
     </div>
 
   </div>
 
 </div>
 
-);
+        {/* COVER */}
+        <div className="h-32 rounded-2xl bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 shadow-sm border border-gray-200"></div>
+
+        {/* PROFILE HEADER */}
+        <div className="flex items-end gap-4 -mt-10 px-4">
+
+          {/* AVATAR */}
+          <div className="relative">
+            <img
+              src={
+                profile.avatar_url ||
+                "https://ui-avatars.com/api/?name=" + profile.full_name
+              }
+              className="w-24 h-24 rounded-full border-4 border-white object-cover shadow-lg"
+            />
+
+            <label className="absolute bottom-1 right-1 bg-white p-1.5 rounded-full border border-gray-200 cursor-pointer shadow hover:scale-105 transition">
+              <FiCamera size={14} />
+              <input
+                type="file"
+                hidden
+                onChange={(e) => uploadAvatar(e.target.files[0])}
+              />
+            </label>
+          </div>
+
+          {/* NAME SECTION */}
+          <div className="pb-2">
+            <h1 className="text-xl font-semibold tracking-tight">
+              {profile.full_name || "No name"}
+            </h1>
+
+            <p className="text-sm text-gray-500 flex items-center gap-2">
+              @{profile.username}
+
+              <button
+                onClick={regenerateUsername}
+                className="text-gray-400 hover:text-black transition"
+              >
+                <FiRefreshCw size={12} />
+              </button>
+            </p>
+          </div>
+        </div>
+
+        {/* STATS CARD */}
+        <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 grid grid-cols-3 text-center overflow-hidden">
+
+          <div className="py-4">
+            <p className="font-bold text-lg">{profile.posts_count || 0}</p>
+            <p className="text-xs text-gray-500">Posts</p>
+          </div>
+
+          <div className="py-4 border-x border-gray-100">
+            <p className="font-bold text-lg">{profile.followers_count || 0}</p>
+            <p className="text-xs text-gray-500">Followers</p>
+          </div>
+
+          <div className="py-4">
+            <p className="font-bold text-lg">{profile.following_count || 0}</p>
+            <p className="text-xs text-gray-500">Following</p>
+          </div>
+
+        </div>
+
+        {/* PROFILE FIELDS */}
+        <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
+
+          <Field label="Bio" value={profile.bio} field="bio" />
+          <Field label="Website" value={profile.website} field="website" />
+          <Field label="Location" value={profile.location} field="location" />
+          <Field label="Phone" value={profile.phone} field="phone" />
+          <Field label="School" value={profile.school} field="school" />
+          <Field label="Department" value={profile.department} field="department" />
+          <Field label="Work" value={profile.work} field="work" />
+          <Field label="Hobby" value={profile.hobby} field="hobby" />
+          <Field
+            label="Relationship"
+            value={profile.relationship_status}
+            field="relationship_status"
+          />
+          <Field label="Age" value={profile.age} field="age" />
+
+        </div>
+
+      </div>
+    </div>
+  );
 }

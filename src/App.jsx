@@ -39,6 +39,7 @@ import ProfileModal from "./pages/profileModal";
 import { Capacitor } from "@capacitor/core";
 import { getLocalMessages } from "./utils/chatSync";
 
+import { BrowserRouter, Routes, Route, Router } from "react-router-dom";
 
 
 export default function App() {
@@ -400,4 +401,5 @@ export default function App() {
 
     </>
   );
+
 }

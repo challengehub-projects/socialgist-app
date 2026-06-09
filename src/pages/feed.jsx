@@ -5,6 +5,7 @@ import { Preferences } from "@capacitor/preferences";
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
 import { Filesystem, Directory, } from "@capacitor/filesystem";
+import { BiShare } from "react-icons/bi";
 import {
   MessageCircle,
   Wifi,
@@ -18,15 +19,16 @@ import {
   Sparkles,
   Users,
   CornerUpRight,
-  CornerUpLeftIcon
+  CornerUpLeftIcon,
+  MessageSquare,
+  HeartHandshake
 } from "lucide-react";
-import { GiConsoleController } from "react-icons/gi";
-import ProfileModal from "./profileModal"
+import { showNotification } from "../utils/notifications";
 import { sendNotification } from "../utils/sendNotifications";
-import { initNotifications, showNotification } from "../utils/notifications";
-import { Capacitor } from "@capacitor/core";
-import { toPng } from "html-to-image";
+import ProfileModal from "./profileModal";
 /* import Share from "@capacitor/share"; */
+
+
 
 export default function Feed({
   onOpenMessages,
@@ -62,13 +64,46 @@ export default function Feed({
 
   const [activeTab, setActiveTab] = useState("all");
 
+  const [open, setOpen] = useState(false);
+  const [loadingcomment, setLoadingcomment] = useState(false);
+  const [comments, setComments] = useState([]);
 
+  const [commentText, setCommentText] = useState("");
+  const [sending, setSending] = useState(false);
+
+
+
+  const [activePost, setActivePost] = useState(null);
+
+
+  const openComments = async (post) => {
+    setOpen(true);
+    setLoadingcomment(true);
+    setComments([]);
+
+    try {
+      await new Promise((resolve) =>
+        setTimeout(resolve, 500)
+      );
+
+      setActivePost(post);
+
+      const commentsFromPost =
+        post?.comments || [];
+
+      setComments(commentsFromPost);
+    } catch (err) {
+      console.log(err);
+    } finally {
+      setLoadingcomment(false);
+    }
+  };
 
   useEffect(() => {
-  setPage(0);
-  setPosts([]);
-  fetchPosts(true);
-}, [activeTab]);
+    setPage(0);
+    setPosts([]);
+    fetchPosts(true);
+  }, [activeTab]);
 
   const openProfileModal = (post) => {
     setSelectedProfile(post);
@@ -96,6 +131,67 @@ export default function Feed({
     });
   };
 
+
+
+  const addCommentToPost = async () => {
+    if (!commentText.trim() || !activePost) return;
+
+    console.log(me)
+
+    const newComment = {
+      id: crypto.randomUUID(),
+      user: me?.user_metadata.full_name || "Anonymous",
+      user_id: me?.id,
+      text: commentText.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    // 1. INSTANT UI UPDATE
+    setComments((prev) => [newComment, ...prev]);
+    setCommentText("");
+
+    try {
+      // 2. GET CURRENT COMMENTS FROM POST
+      const { data, error } = await supabase
+        .from("posts")
+        .select("comments")
+        .eq("id", activePost.id)
+        .single();
+
+      if (error) throw error;
+
+      const existing = data?.comments || [];
+
+      // 3. UPDATE ARRAY
+      const updated = [newComment, ...existing];
+
+      // 4. SAVE BACK TO SUPABASE
+      await supabase
+        .from("posts")
+        .update({ comments: updated })
+        .eq("id", activePost.id);
+
+      {
+        if (Capacitor.isNativePlatform()) {
+          await showNotification(
+            "💬 New Comment",
+            "You commented on a post"
+          );
+        }
+
+        await sendNotification({
+          title: "💬 New Comment",
+          body: "Your commented on a post",
+        });
+
+        console.log("💬 COMMENT RECEIVED");
+      }
+
+
+    } catch (err) {
+      console.error("Comment failed:", err.message);
+    }
+  };
 
 
 
@@ -633,244 +729,144 @@ export default function Feed({
   // ================= REALTIME =================
 
   useEffect(() => {
-
     const channel = supabase
-
       .channel("feed-realtime")
-
       .on(
         "postgres_changes",
-
         {
           event: "*",
           schema: "public",
           table: "posts",
         },
-
         async (payload) => {
-
-          console.log(
-            "🔥 FEED UPDATE:",
-            payload
-          );
+          console.log("🔥 FEED UPDATE:", payload);
 
           // =========================
           // IGNORE NEW POSTS
           // =========================
-
-          if (
-            payload.eventType ===
-            "INSERT"
-          ) {
-
+          if (payload.eventType === "INSERT") {
             return;
-
           }
 
           // =========================
-          // POST UPDATED
+          // UPDATE POST
           // =========================
-
-          if (
-            payload.eventType ===
-            "UPDATE"
-          ) {
-
+          if (payload.eventType === "UPDATE") {
+            // Update post counts immediately
             setPosts((prev) =>
-
               prev.map((post) =>
-
-                post.id ===
-                  payload.new.id
-
+                post.id === payload.new.id
                   ? {
-
                     ...post,
-
-                    ...payload.new,
-
+                    likes_count: payload.new.likes_count,
+                    shares_count: payload.new.shares_count,
+                    comments_count: payload.new.comments_count,
+                    updated_at: payload.new.updated_at,
                   }
-
                   : post
-
               )
-
             );
 
-            // =========================
+            // ==================================
             // LIKE NOTIFICATION
-            // =========================
-
-            const oldLikes =
-              payload.old
-                ?.likes_count || 0;
-
-            const newLikes =
-              payload.new
-                ?.likes_count || 0;
-
-
-
-
-            console.log(payload.new.user_id)
+            // ==================================
+            const oldLikes = payload.old?.likes_count || 0;
+            const newLikes = payload.new?.likes_count || 0;
 
             if (
-
-
               newLikes > oldLikes &&
-
               payload.new.user_id === me?.id
-
             ) {
-
-              if (
-                Capacitor.isNativePlatform()
-              ) {
+              if (Capacitor.isNativePlatform()) {
                 await showNotification(
                   "❤️ New Like",
                   "Someone liked your post"
                 );
-
               }
 
-
-
               await sendNotification({
-
-                title:
-                  "❤️ New Like",
-
-                body:
-                  "Someone liked your post",
-
+                title: "❤️ New Like",
+                body: "Someone liked your post",
               });
 
-              console.log("SOMEONE LIKED YOUR POST");
-
+              console.log("❤️ LIKE RECEIVED");
             }
 
-            else {
-
-              /*      await showNotification(
-                     "❤️ Unlike Like Message",
-                     "Someone unliked your post"
-                   );
-     
-                   await sendNotification({
-     
-                     title:
-                       "❤️ Unlike Like Message",
-     
-                     body:
-                       "Someone unliked your post",
-     
-                   });
-      */
-              console.log("LIKE COUNT CHANGED:", {
-                old: oldLikes,
-                new: newLikes
-              });
-
-
-            }
-
-            // =========================
+            // ==================================
             // SHARE NOTIFICATION
-            // =========================
-
-            const oldShares =
-              payload.old
-                ?.shares_count || 0;
-
-            const newShares =
-              payload.new
-                ?.shares_count || 0;
+            // ==================================
+            const oldShares = payload.old?.shares_count || 0;
+            const newShares = payload.new?.shares_count || 0;
 
             if (
-
               newShares > oldShares &&
-
-              payload.new.user_id ===
-              me?.id
-
+              payload.new.user_id === me?.id
             ) {
-
-              if (Capacitor.isNativePlatform) {
+              if (Capacitor.isNativePlatform()) {
                 await showNotification(
-                  "New Share",
-                  "Someone Share your post"
+                  "📤 New Share",
+                  "Someone shared your post"
                 );
-
               }
 
               await sendNotification({
-
-                title:
-                  "📤 New Share",
-
-                body:
-                  "Someone shared your post",
-
+                title: "📤 New Share",
+                body: "Someone shared your post",
               });
 
+              console.log("📤 SHARE RECEIVED");
+            }
+
+            // ==================================
+            // COMMENT NOTIFICATION
+            // ==================================
+            const oldComments =
+              payload.old?.comments_count || 0;
+
+            const newComments =
+              payload.new?.comments_count || 0;
+
+            if (
+              newComments > oldComments &&
+              payload.new.user_id === me?.id
+            ) {
+              if (Capacitor.isNativePlatform()) {
+                await showNotification(
+                  "💬 New Comment",
+                  "Someone commented on your post"
+                );
+              }
+
+              await sendNotification({
+                title: "💬 New Comment",
+                body: "Someone commented on your post",
+              });
+
+              console.log("💬 COMMENT RECEIVED");
             }
 
             return;
-
           }
 
           // =========================
           // DELETE POST
           // =========================
-
-          if (
-            payload.eventType ===
-            "DELETE"
-          ) {
-
+          if (payload.eventType === "DELETE") {
             setPosts((prev) =>
-
               prev.filter(
-
-                (post) =>
-
-                  post.id !==
-                  payload.old.id
-
+                (post) => post.id !== payload.old.id
               )
-
             );
-
           }
-
         }
       )
-
       .subscribe((status) => {
-
-        console.log(
-          "📡 Feed Status:",
-          status
-        );
-
+        console.log("📡 Feed Status:", status);
       });
 
-    try {
-
-    } catch (error) {
-
-    } finally {
-
-    }
-
     return () => {
-
-      supabase.removeChannel(
-        channel
-      );
-
+      supabase.removeChannel(channel);
     };
-
   }, [me?.id]);
 
   // ================= NETWORK =================
@@ -1471,50 +1467,62 @@ export default function Feed({
               className="bg-white/80 dark:bg-[#18191A] mb-4 sm:rounded-3xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5"
             >
               {/* HEADER */}
-
               <div className="flex items-center gap-3 px-4 py-4">
+
+                {/* AVATAR */}
                 {post.profile_image ? (
                   <img
-                    src={
-                      post.profile_image
-                    }
-                    alt=""
-                    className="h-12 w-12 rounded-full object-cover ring-2 ring-purple-800 active:scale-95 transition"
-                  />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm ring-2 ring-purple-00 active:scale-95 transition"
-                  >
-                    {(
-                      post.profile_name ||
-                      "U"
-                    )
-                      .charAt(0)
-                      .toUpperCase()}
-                  </div>
-                )}
-
-                <div className="flex-1">
-                  <h3 className="font-semibold text-sm text-purple-900 dark:text-purple-400 cursor-pointer hover:underline"
+                    src={post.profile_image}
+                    alt={post.profile_name || "User"}
                     onClick={() =>
                       openProfileModal({
-                        profile_name: "Emzy",
-                        profile_image:
-                          "https://i.pravatar.cc/155?img=12",
-                        bio: "Connect • Vibe • Gist",
+                        profile_name: post.profile_name || "Anonymous",
+                        profile_image: post.profile_image,
+                        bio: post.bio || "Connect • Vibe • Gist",
                         posts: posts?.length || 0,
                       })
                     }
-                  >
-                    {
-                      post.profile_name ||
-                      "Anonymous"
+                    className="h-12 w-12 rounded-full object-cover ring-2 ring-purple-800 active:scale-95 transition cursor-pointer"
+                  />
+                ) : (
+                  <div
+                    onClick={() =>
+                      openProfileModal({
+                        profile_name: post.profile_name || "Anonymous",
+                        profile_image: null,
+                        bio: post.bio || "Connect • Vibe • Gist",
+                        posts: posts?.length || 0,
+                      })
                     }
+                    className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm ring-2 ring-purple-500 active:scale-95 transition cursor-pointer"
+                  >
+                    {(post.profile_name || "U").charAt(0).toUpperCase()}
+                  </div>
+                )}
+
+                {/* USER INFO */}
+                <div className="flex-1">
+                  <h3
+                    onClick={() =>
+                      openProfileModal({
+                        profile_name: post.profile_name || "Anonymous",
+                        profile_image: post.profile_image || null,
+                        bio: post.bio || "Connect • Vibe • Gist",
+                        posts: posts?.length || 0,
+                      })
+                    }
+                    className="font-semibold text-sm text-purple-900 dark:text-purple-400 cursor-pointer hover:underline active:scale-95 transition"
+                  >
+                    {post.profile_name || "Anonymous"}
                   </h3>
 
                   <p className="text-xs text-gray-500">
-                    {new Date(
-                      post.created_at
-                    ).toLocaleString()}
+                    {post.created_at
+                      ? new Date(post.created_at).toLocaleString("en-NG", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })
+                      : "Just now"}
                   </p>
                 </div>
               </div>
@@ -1630,24 +1638,49 @@ export default function Feed({
 
 
                 <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center justify-center h-7 w-7 rounded-full bg-gradient-to-r from-pink-500 to-red-500 text-white">
+
+                  {/* LEFT COUNTS */}
+                  <div className="flex items-center gap-5">
+
+                    {/* LIKES (with icon) */}
+                    <div className="flex items-center gap-1">
                       <Heart
-                        size={13}
-                        fill="white"
+                        size={25}
+                        className="text-red-500"
+                        fill="currentcolor"
                       />
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        {post.likes_count || 0}
+                      </span>
                     </div>
 
-                    <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
-                      {post.likes_count ||
-                        0}{" "}
-                      likes
-                    </span>
+                    {/* COMMENTS (no icon) */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        Comments:
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {post.comments_count || 0}
+                      </span>
+                    </div>
+
+                    {/* SHARES (no icon) */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm text-gray-600 dark:text-gray-300 font-medium">
+                        Shares:
+                      </span>
+                      <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                        {post.shares_count || 0}
+                      </span>
+                    </div>
+
                   </div>
 
-                  <div className="text-xs text-gray-500">
+                  {/* APP NAME RIGHT */}
+                  <div className="text-xs font-semibold text-purple-600">
                     SocialGist
                   </div>
+
                 </div>
 
                 {/* BUTTONS */}
@@ -1692,11 +1725,11 @@ export default function Feed({
                   {/* MESSAGE */}
 
                   <button
-                    onClick={() =>
-                      onOpenMessages(
-                        post
-                      )
-                    }
+                    onClick={() => {
+                      setActivePost(post);
+                      setComments(post.comments || []);
+                      setOpen(true);
+                    }}
                     className="flex items-center justify-center gap-2 h-12 rounded-2xl hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200 active:scale-95 transition"
                   >
                     <MessageCircle
@@ -1704,9 +1737,11 @@ export default function Feed({
                     />
 
                     <span className="text-sm font-semibold">
-                      Message
+                      Comment
                     </span>
                   </button>
+
+
 
                   {/* SHARE */}
 
@@ -1718,7 +1753,7 @@ export default function Feed({
                     }
                     className="flex items-center justify-center gap-2 h-12 rounded-2xl bg-purple-500/10 text-purple-600 active:scale-95 transition"
                   >
-                    <CornerUpRight size={20} />
+                    <BiShare size={20} className="w-6 h-6 rotate-180" />
 
                     <span className="text-sm font-semibold">
                       Share
@@ -1740,6 +1775,193 @@ export default function Feed({
             </div>
           )
         }
+
+
+        {/* COMMENTS BOTTOM SHEET */}
+        {open && (
+          <div className="fixed inset-0 z-50">
+
+            {/* BACKDROP */}
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setOpen(false)}
+            />
+
+            {/* SHEET */}
+            <div className="absolute bottom-0 left-0 right-0 h-[85vh] bg-white rounded-t-[28px] shadow-[0_-20px_60px_rgba(0,0,0,0.2)] flex flex-col animate-slideUp">
+
+              {/* HANDLE */}
+              <div className="flex justify-center py-3">
+                <div className="w-14 h-1.5 rounded-full bg-gray-300" />
+              </div>
+
+              {/* HEADER */}
+              <div className="px-5 pb-4 border-b border-gray-100 flex items-center justify-between">
+
+                <div>
+                  <h2 className="font-bold text-lg text-gray-900">
+                    Comments
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {comments?.length || 0} comments
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-9 h-9 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* COMMENTS */}
+              <div className="flex-1 overflow-y-auto p-4">
+
+                {/* PREMIUM SKELETON */}
+                {loadingcomment && (
+                  <div className="space-y-6">
+
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div
+                        key={i}
+                        className="flex gap-3 animate-pulse"
+                      >
+                        {/* Avatar */}
+                        <div className="w-11 h-11 rounded-full bg-gray-200 shrink-0" />
+
+                        {/* Content */}
+                        <div className="flex-1">
+
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="h-3 w-24 rounded-full bg-gray-200" />
+                            <div className="h-2 w-10 rounded-full bg-gray-100" />
+                          </div>
+
+                          <div className="bg-gray-50 rounded-2xl p-4 space-y-2">
+                            <div className="h-3 w-full rounded-full bg-gray-200" />
+                            <div className="h-3 w-5/6 rounded-full bg-gray-200" />
+                            <div className="h-3 w-2/3 rounded-full bg-gray-100" />
+                          </div>
+
+                        </div>
+                      </div>
+                    ))}
+
+                  </div>
+                )}
+
+
+                {/* EMPTY STATE */}
+                {!loadingcomment && comments.length === 0 && (
+                  <div className="h-full flex flex-col items-center justify-center text-center">
+
+                    <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center text-2xl">
+                      <MessageSquare size={28} className="text-purple-600" />
+                    </div>
+
+                    <h3 className="mt-4 font-semibold text-gray-900">
+                      No comments yet
+                    </h3>
+
+                    <p className="text-sm text-gray-500 mt-1">
+                      Be the first person to comment.
+                    </p>
+
+                  </div>
+                )}
+
+                {/* COMMENTS */}
+                {!loadingcomment &&
+                  comments.map((c) => (
+                    <div
+                      key={c.id}
+                      className="flex gap-3 py-3 border-b border-gray-100 last:border-none"
+                    >
+
+                      {/* USER AVATAR */}
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-violet-600 text-white flex items-center justify-center font-semibold text-sm">
+                        {(c.user || "U")[0].toUpperCase()}
+                      </div>
+
+                      <div className="flex-1">
+
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-sm text-gray-900">
+                            {c.user}
+                          </span>
+
+                          <span className="text-xs text-gray-400">
+                            now
+                          </span>
+                        </div>
+
+                        <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                          {c.text}
+                        </p>
+
+                      </div>
+
+                    </div>
+                  ))}
+              </div>
+
+              {/* INPUT */}
+              <div className="border-t border-gray-100 p-4">
+
+                <div className="flex items-center gap-2">
+
+                  <input
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        addCommentToPost({
+                          postId: activePost?.id,
+                          commentText,
+                          me,
+                          setComments,
+                          setCommentText,
+                        });
+                      }
+                    }}
+                    placeholder="Write a comment..."
+                    className="flex-1 h-12 px-4 rounded-full border border-gray-200 bg-gray-50 text-sm outline-none focus:border-purple-400 focus:bg-white transition"
+                  />
+
+
+
+                  <button
+                    onClick={() => addCommentToPost(activePost)}
+                    className="
+    h-12
+    px-5
+    rounded-full
+    bg-gradient-to-r
+    from-purple-600
+    to-violet-600
+    text-white
+    font-medium
+    shadow-lg
+    hover:scale-105
+    active:scale-95
+    transition
+    flex
+    items-center
+    justify-center
+  "
+                  >
+                    <Send size={18} />
+                  </button>
+
+                </div>
+
+              </div>
+
+            </div>
+          </div>
+        )}
+
       </div>
     </div >
   );

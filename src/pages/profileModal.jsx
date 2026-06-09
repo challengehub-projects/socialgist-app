@@ -1,15 +1,13 @@
 // ProfileModal.jsx
 
-import React, {
-  useEffect,
-} from "react";
-
+import React, { useEffect } from "react";
 import {
   X,
   MessageCircle,
   User2,
-  Sparkles,
   ChevronRight,
+  UserPlus,
+  UserCheck,
 } from "lucide-react";
 
 export default function ProfileModal({
@@ -17,258 +15,167 @@ export default function ProfileModal({
   onClose,
   profile,
   onNavigate,
+  isFollowing = false,
+  onFollowToggle,
 }) {
-  // CLOSE ON ESC
-
+  // ESC CLOSE
   useEffect(() => {
-    const handleKey =
-      (e) => {
-        if (e.key === "Escape") {
-          onClose();
-        }
-      };
+    const handleKey = (e) => {
+      if (e.key === "Escape") onClose();
+    };
 
-    window.addEventListener(
-      "keydown",
-      handleKey
-    );
-
-    return () =>
-      window.removeEventListener(
-        "keydown",
-        handleKey
-      );
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
   if (!open) return null;
+
+  const username =
+    profile?.profile_name
+      ?.replace(/\s+/g, "")
+      .toLowerCase() || "user";
 
   return (
     <div className="fixed inset-0 z-[99999] flex items-end justify-center">
 
       {/* BACKDROP */}
-
       <div
         onClick={onClose}
-        className="absolute inset-0 bg-black/70 backdrop-blur-md animate-fadeIn"
+        className="absolute inset-0 bg-black/70 backdrop-blur-md"
       />
 
-      {/* MODAL */}
+      {/* SHEET */}
+      <div className="relative w-full h-[88vh] rounded-t-[40px] overflow-hidden shadow-[0_-10px_60px_rgba(0,0,0,0.6)] bg-gradient-to-b from-[#1b002f] via-[#4a0ea3] to-[#7a2cf5] flex flex-col">
 
-      <div className="relative w-full h-[90vh] rounded-t-[40px] overflow-hidden animate-slideUp shadow-[0_-10px_60px_rgba(0,0,0,0.6)] bg-gradient-to-b from-[#23003b] via-[#5b0ea8] to-[#8b2cf5] flex flex-col">
-
-        {/* TOP GLOW */}
-
+        {/* glow */}
         <div className="absolute top-0 left-0 w-full h-72 bg-white/10 blur-3xl opacity-40" />
 
         {/* HANDLE */}
-
         <div className="relative z-20 flex justify-center pt-3">
           <div className="w-20 h-1.5 rounded-full bg-white/30" />
         </div>
 
-        {/* HEADER */}
-
-        <div className="relative z-20 flex items-center justify-between px-5 mt-4">
-
-          {/* APP */}
-
-          <div className="flex items-center gap-3">
-
-            <div className="h-12 w-12 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/10 flex items-center justify-center">
-
-              <Sparkles
-                size={22}
-                className="text-white"
-              />
-
-            </div>
-
-            <div>
-              <h1 className="text-white text-2xl font-black leading-none">
-                SocialGist
-              </h1>
-
-              <p className="text-white/60 text-xs mt-1">
-                connect • vibe • gist
-              </p>
-            </div>
-
-          </div>
-
-          {/* CLOSE */}
-
+        {/* CLOSE */}
+        <div className="absolute top-4 right-4 z-30">
           <button
             onClick={onClose}
             className="h-11 w-11 rounded-full bg-white/10 border border-white/10 backdrop-blur-xl flex items-center justify-center text-white active:scale-95 transition"
           >
             <X size={20} />
           </button>
-
         </div>
 
         {/* CONTENT */}
-
         <div className="relative z-20 flex-1 overflow-y-auto px-6 pt-10 pb-10 flex flex-col items-center text-center">
 
-          {/* PROFILE IMAGE */}
-
+          {/* AVATAR */}
           {profile?.profile_image ? (
             <img
-              src={
-                profile.profile_image
-              }
-              alt=""
+              src={profile.profile_image}
+              alt={profile.profile_name || "User"}
               className="w-36 h-36 rounded-full object-cover border-4 border-white shadow-[0_10px_40px_rgba(255,255,255,0.25)]"
             />
           ) : (
             <div className="w-36 h-36 rounded-full bg-white/15 border-4 border-white flex items-center justify-center text-white text-6xl font-black shadow-2xl">
-              {(
-                profile?.profile_name ||
-                "U"
-              )
-                .charAt(0)
-                .toUpperCase()}
+              {(profile?.profile_name || "U").charAt(0).toUpperCase()}
             </div>
           )}
 
           {/* NAME */}
-
           <h1 className="mt-6 text-4xl font-black text-white break-words">
-            {profile?.profile_name ||
-              "Anonymous"}
+            {profile?.profile_name || "Anonymous User"}
           </h1>
 
           {/* USERNAME */}
-
           <p className="text-white/70 text-sm mt-2">
-            @
-            {(
-              profile?.profile_name ||
-              "user"
-            )
-              .replace(/\s+/g, "")
-              .toLowerCase()}
+            @{username}
           </p>
 
-          {/* CARD */}
+          {/* BIO */}
+          <p className="text-white/85 text-sm mt-6 max-w-sm leading-relaxed">
+            {profile?.bio ||
+              "This user hasn’t added a bio yet."}
+          </p>
 
-          <div className="w-full mt-8 rounded-[32px] bg-white/10 border border-white/10 backdrop-blur-2xl p-6">
+          {/* STATS CARD */}
+          <div className="w-full mt-8 rounded-[32px] bg-white/10 border border-white/10 backdrop-blur-2xl p-6 text-left">
 
             <div className="flex items-center gap-2 text-white mb-4">
-
               <User2 size={18} />
-
               <span className="font-black text-lg">
-                Profile
+                About
               </span>
-
             </div>
 
-            <p className="text-sm leading-relaxed text-white/85 text-left">
-              Welcome to this
-              SocialGist profile.
-              Connect, vibe,
-              gist, share moments
-              and explore the
-              community together.
-            </p>
+            <div className="text-white/85 text-sm space-y-2">
+              <p>
+                Posts:{" "}
+                <span className="font-bold">
+                  {profile?.posts ?? 0}
+                </span>
+              </p>
 
+              <p>
+                Followers:{" "}
+                <span className="font-bold">
+                  {profile?.followers ?? 0}
+                </span>
+              </p>
+
+              <p>
+                Following:{" "}
+                <span className="font-bold">
+                  {profile?.following ?? 0}
+                </span>
+              </p>
+            </div>
           </div>
 
-          {/* ACTION BUTTONS */}
-
+          {/* ACTIONS */}
           <div className="w-full flex items-center gap-4 mt-8">
 
             {/* MESSAGE */}
-
             <button
               onClick={() =>
-                
-                onNavigate(
-                  "messages"
-                )
+                onNavigate?.("messages", profile)
               }
               className="flex-1 h-16 rounded-3xl bg-white text-purple-700 font-black flex items-center justify-center gap-3 shadow-2xl active:scale-95 transition"
             >
-
-              <MessageCircle
-                size={22}
-              />
-
-              <span className="text-base">
-                Message
-              </span>
-
+              <MessageCircle size={22} />
+              <span>Message</span>
             </button>
 
-            {/* VIEW PROFILE */}
-
+            {/* FOLLOW */}
             <button
-              onClick={() =>
-                onNavigate(
-                  "profile"
-                )
-              }
+              onClick={() => onFollowToggle?.(profile)}
               className="flex-1 h-16 rounded-3xl bg-black/20 border border-white/10 backdrop-blur-2xl text-white font-black flex items-center justify-center gap-3 active:scale-95 transition"
             >
-
-              <ChevronRight
-                size={22}
-              />
-
-              <span className="text-base">
-                View Profile
-              </span>
-
+              {isFollowing ? (
+                <>
+                  <UserCheck size={22} />
+                  <span>Following</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={22} />
+                  <span>Follow</span>
+                </>
+              )}
             </button>
-
           </div>
 
+          {/* VIEW FULL PROFILE */}
+          <button
+            onClick={() => onNavigate?.("profile", profile)}
+            className="mt-6 flex items-center gap-2 text-white/80 hover:text-white transition active:scale-95"
+          >
+            <span className="font-semibold">
+              View full profile
+            </span>
+            <ChevronRight size={18} />
+          </button>
         </div>
       </div>
-
-      {/* ANIMATIONS */}
-
-      <style>{`
-        .animate-slideUp {
-          animation: slideUp 0.4s
-            cubic-bezier(
-              0.22,
-              1,
-              0.36,
-              1
-            );
-        }
-
-        .animate-fadeIn {
-          animation: fadeIn 0.25s
-            ease;
-        }
-
-        @keyframes slideUp {
-          from {
-            transform: translateY(
-              100%
-            );
-          }
-
-          to {
-            transform: translateY(
-              0
-            );
-          }
-        }
-
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-
-          to {
-            opacity: 1;
-          }
-        }
-      `}</style>
     </div>
   );
 }
