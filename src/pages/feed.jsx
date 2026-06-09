@@ -65,7 +65,7 @@ export default function Feed({
   const [activeTab, setActiveTab] = useState("all");
 
   const [open, setOpen] = useState(false);
-  const [loadingcomment, setLoadingcomment] = useState(false);
+  const [loadingcomment, setLoadingcomment] = useState(true);
   const [comments, setComments] = useState([]);
 
   const [commentText, setCommentText] = useState("");
@@ -75,23 +75,34 @@ export default function Feed({
 
   const [activePost, setActivePost] = useState(null);
 
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [followingIds, setFollowingIds] = useState([]);
+
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState(null);
+
 
   const openComments = async (post) => {
     setOpen(true);
     setLoadingcomment(true);
     setComments([]);
+    setActivePost(post);
 
     try {
-      await new Promise((resolve) =>
-        setTimeout(resolve, 500)
-      );
+      const { data, error } = await supabase
+        .from("posts")
+        .select("comments")
+        .eq("id", post.id)
+        .single();
 
-      setActivePost(post);
+      if (error) throw error;
 
-      const commentsFromPost =
-        post?.comments || [];
+      setComments(data?.comments || []);
+      setActivePost((prev) => ({
+        ...prev,
+        comments: data?.comments || [],
+      }));
 
-      setComments(commentsFromPost);
     } catch (err) {
       console.log(err);
     } finally {
@@ -105,11 +116,81 @@ export default function Feed({
     fetchPosts(true);
   }, [activeTab]);
 
-  const openProfileModal = (post) => {
-    setSelectedProfile(post);
-    setOpenProfile(true);
+  /*   const openProfileModal = async (userId) => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+  
+        if (error) throw error;
+  
+        setSelectedProfile(data);
+        setProfileModalOpen(true);
+  
+      } catch (err) {
+        console.log("Profile load error:", err);
+      }
+    }; */
+
+
+
+
+
+  const openUserProfile = async (userId) => {
+    try {
+      setProfileOpen(true);
+      setProfileData(null); // triggers loading state in modal if you want
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+
+        console.log(data)
+
+      if (error) throw error;
+
+      setProfileData(data);
+    } catch (err) {
+      console.log("Profile load error:", err);
+    }
   };
 
+  useEffect(() => {
+    if (!activePost?.id) return;
+
+    const channel = supabase
+      .channel("post-comments-live")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "posts",
+          filter: `id=eq.${activePost.id}`,
+        },
+        (payload) => {
+          const updatedComments = payload.new.comments || [];
+
+          // update modal comments live
+          setComments(updatedComments);
+
+          // update header counter live
+          setActivePost((prev) => ({
+            ...prev,
+            comments: updatedComments,
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activePost?.id]);
 
 
   const [page, setPage] = useState(0);
@@ -162,14 +243,26 @@ export default function Feed({
 
       const existing = data?.comments || [];
 
-      // 3. UPDATE ARRAY
-      const updated = [newComment, ...existing];
 
-      // 4. SAVE BACK TO SUPABASE
+      //COMMENT ARRAY
+      const updated = [newComment, ...(existing || [])];
+
+
+      //SAVE BACK TO SUPBASE
       await supabase
         .from("posts")
-        .update({ comments: updated })
+        .update({
+          comments: updated,
+          comments_count: updated.length,
+        })
         .eq("id", activePost.id);
+
+
+      setComments(updated);
+      setActivePost((prev) => ({
+        ...prev,
+        comments: updated,
+      }));
 
       {
         if (Capacitor.isNativePlatform()) {
@@ -181,7 +274,7 @@ export default function Feed({
 
         await sendNotification({
           title: "💬 New Comment",
-          body: "Your commented on a post",
+          body: "You commented on a post",
         });
 
         console.log("💬 COMMENT RECEIVED");
@@ -1474,26 +1567,29 @@ export default function Feed({
                   <img
                     src={post.profile_image}
                     alt={post.profile_name || "User"}
-                    onClick={() =>
-                      openProfileModal({
-                        profile_name: post.profile_name || "Anonymous",
-                        profile_image: post.profile_image,
-                        bio: post.bio || "Connect • Vibe • Gist",
-                        posts: posts?.length || 0,
-                      })
-                    }
+                    /*   onClick={() =>
+                        openProfileModal({
+                          profile_name: post.profile_name || "Anonymous",
+                          profile_image: post.profile_image,
+                          bio: post.bio || "Connect • Vibe • Gist",
+                          posts: posts?.length || 0,
+                        })
+                      } */
+
+                    onClick={() => openUserProfile(post.user_id)}
                     className="h-12 w-12 rounded-full object-cover ring-2 ring-purple-800 active:scale-95 transition cursor-pointer"
                   />
                 ) : (
                   <div
-                    onClick={() =>
-                      openProfileModal({
-                        profile_name: post.profile_name || "Anonymous",
-                        profile_image: null,
-                        bio: post.bio || "Connect • Vibe • Gist",
-                        posts: posts?.length || 0,
-                      })
-                    }
+                    /*   onClick={() =>
+                        openUserProfile({
+                          profile_name: post.profile_name || "Anonymous",
+                          profile_image: null,
+                          bio: post.bio || "Connect • Vibe • Gist",
+                          posts: posts?.length || 0,
+                        })
+                      } */
+                    onClick={() => openUserProfile(post.user_id)}
                     className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-sm ring-2 ring-purple-500 active:scale-95 transition cursor-pointer"
                   >
                     {(post.profile_name || "U").charAt(0).toUpperCase()}
@@ -1503,14 +1599,15 @@ export default function Feed({
                 {/* USER INFO */}
                 <div className="flex-1">
                   <h3
-                    onClick={() =>
-                      openProfileModal({
-                        profile_name: post.profile_name || "Anonymous",
-                        profile_image: post.profile_image || null,
-                        bio: post.bio || "Connect • Vibe • Gist",
-                        posts: posts?.length || 0,
-                      })
-                    }
+                    /*   onClick={() =>
+                        openUserProfile({
+                          profile_name: post.profile_name || "Anonymous",
+                          profile_image: post.profile_image || null,
+                          bio: post.bio || "Connect • Vibe • Gist",
+                          posts: posts?.length || 0,
+                        })
+                      } */
+                    onClick={() => openUserProfile(post.user_id)}
                     className="font-semibold text-sm text-purple-900 dark:text-purple-400 cursor-pointer hover:underline active:scale-95 transition"
                   >
                     {post.profile_name || "Anonymous"}
@@ -1726,6 +1823,7 @@ export default function Feed({
 
                   <button
                     onClick={() => {
+                      openComments(post)
                       setActivePost(post);
                       setComments(post.comments || []);
                       setOpen(true);
@@ -1803,7 +1901,7 @@ export default function Feed({
                     Comments
                   </h2>
                   <p className="text-xs text-gray-500">
-                    {comments?.length || 0} comments
+                    {activePost?.comments?.length || comments.length || 0} comments
                   </p>
                 </div>
 
@@ -1961,6 +2059,7 @@ export default function Feed({
             </div>
           </div>
         )}
+
 
       </div>
     </div >
