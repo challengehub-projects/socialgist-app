@@ -256,27 +256,30 @@ export default function Feed({
 
 
 
+
   const addCommentToPost = async () => {
+
+    const profile = await getUserProfile(me.id);
     if (!commentText.trim() || !activePost) return;
 
 
-
-    const profile = await getUserProfile(me.id);
-
     console.log(profile.avatar_url);
-
-    const newComment = {
-      id: crypto.randomUUID(),
-      user: me?.user_metadata.full_name || "Anonymous",
-      user_id: me?.id,
-      avatar: profile.avatar_url,
-      text: commentText.trim(),
-      created_at: new Date().toISOString(),
-    };
 
     /*  console.log(newComment) */
 
     // 1. INSTANT UI UPDATE
+    const tempId = crypto.randomUUID();
+
+    const newComment = {
+      id: tempId,
+      user: me?.user_metadata.full_name || "Anonymous",
+      user_id: me?.id,
+      avatar: profile?.avatar_url,
+      text: commentText.trim(),
+      created_at: new Date().toISOString(),
+    };
+
+    // optimistic UI
     setComments((prev) => [newComment, ...prev]);
     setCommentText("");
 
@@ -783,6 +786,18 @@ export default function Feed({
           }));
 
 
+        const likesMap = {};
+
+        data.forEach((post) => {
+          if (post.user_liked) {
+            likesMap[post.id] = true;
+          }
+        });
+
+        setLikedPosts(likesMap);
+        await cacheLikes(likesMap);
+
+
 
         // CACHE IMAGES
 
@@ -1037,7 +1052,8 @@ export default function Feed({
             if (
               status.connected
             ) {
-              if (Capacitor.isNativePlatform) {
+              if (Capacitor.isNativePlatform()
+              ) {
                 await showToast(
                   "You're back online"
                 );
@@ -1102,169 +1118,9 @@ export default function Feed({
 
 
   // ================= LIKE POST =================
-  /*   const likePost = async (postId) => {
-  
-      try {
-        const alreadyLiked = likedPosts[postId];
-  
-        setAnimatingLike(postId);
-  
-        setTimeout(() => {
-          setAnimatingLike(null);
-        }, 400);
-  
-        // UPDATE UI IMMEDIATELY
-  
-        const updatedPosts = posts.map((post) => {
-          if (post.id === postId) {
-            return {
-              ...post,
-              likes_count: alreadyLiked
-                ? Math.max(
-                  0,
-                  (post.likes_count || 0) - 1
-                )
-                : (post.likes_count || 0) + 1,
-            };
-          }
-  
-          return post;
-        });
-  
-        //APP NOTIFICATION
-        if (Capacitor.isNativePlatform) {
-  
-          await showNotification(
-            "Message",
-            "You liked a post!"
-          );
-  
-        }
-  
-        // BROWSER NOTIFICATION
-  
-        await sendNotification({
-  
-          title:
-            "Message",
-  
-          body:
-            "You Liked a post!",
-  
-        });
-  
-        setPosts(updatedPosts);
-  
-        await cachePosts(updatedPosts);
-  
-        // SAVE LOCAL LIKE STATE
-  
-        const updatedLikes = {
-          ...likedPosts,
-          [postId]: !alreadyLiked,
-        };
-  
-        setLikedPosts(updatedLikes);
-  
-        await cacheLikes(updatedLikes);
-  
-        // CHECK NETWORK
-  
-        const status =
-          await Network.getStatus();
-  
-        // OFFLINE
-  
-        if (!status.connected) {
-          const { value } =
-            await Preferences.get({
-              key: "pending_likes",
-            });
-  
-          const pending = value
-            ? JSON.parse(value)
-            : [];
-  
-          pending.push({
-            postId,
-            action: alreadyLiked
-              ? "unlike"
-              : "like",
-          });
-  
-          await Preferences.set({
-            key: "pending_likes",
-            value: JSON.stringify(
-              pending
-            ),
-          });
-  
-          return;
-        }
-  
-        // ONLINE
-  
-        const {
-          data: currentPost,
-          error: fetchError,
-        } = await supabase
-          .from("posts")
-          .select("likes_count")
-          .eq("id", postId)
-          .single();
-  
-        if (fetchError) {
-          console.log(fetchError);
-          return;
-        }
-  
-        const currentLikes =
-          currentPost?.likes_count || 0;
-  
-        const newLikes = alreadyLiked
-          ? Math.max(
-            0,
-            currentLikes - 1
-          )
-          : currentLikes + 1;
-  
-        const { error } =
-          await supabase
-            .from("posts")
-            .update({
-              likes_count: newLikes,
-            })
-            .eq("id", postId);
-  
-        if (error) {
-          console.log(error);
-        }
-  
-  
-        const {
-          data: updatedPost,
-        } = await supabase
-          .from("posts")
-          .select("likes_count")
-          .eq("id", postId)
-          .single();
-  
-  
-        console.log(
-          "LATEST DB LIKE COUNT:",
-          updatedPost.likes_count
-        );
-  
-      } catch (err) {
-        console.log(err);
-      }
-    }; */
-
   const likePost = async (postId) => {
-    postId = String(postId);
-
     try {
-      const alreadyLiked = likedPosts[postId];
+      const alreadyLiked = !!likedPosts[postId];
 
       setAnimatingLike(postId);
 
@@ -1272,12 +1128,17 @@ export default function Feed({
         setAnimatingLike(null);
       }, 400);
 
+      // UPDATE UI IMMEDIATELY
+
       const updatedPosts = posts.map((post) => {
-        if (String(post.id) === postId) {
+        if (post.id === postId) {
           return {
             ...post,
             likes_count: alreadyLiked
-              ? Math.max(0, (post.likes_count || 0) - 1)
+              ? Math.max(
+                0,
+                (post.likes_count || 0) - 1
+              )
               : (post.likes_count || 0) + 1,
           };
         }
@@ -1285,7 +1146,47 @@ export default function Feed({
         return post;
       });
 
+      // CHECK NETWORK
+
+      const status =
+        await Network.getStatus();
+
+
+      //APP NOTIFICATION
+      if (Capacitor.isNativePlatform()) {
+
+        await showNotification(
+          "Message",
+          "You liked a post!"
+        );
+
+      }
+
+      // BROWSER NOTIFICATION
+
+      await sendNotification({
+
+        title:
+          "Message",
+
+        body:
+          "You Liked a post!",
+
+      });
+
       setPosts(updatedPosts);
+
+      await cachePosts(updatedPosts);
+
+
+      if (status.connected) {
+        await sendNotification({
+          title: "❤️ Like",
+          body: "You liked a post",
+        });
+      }
+
+      // SAVE LOCAL LIKE STATE
 
       const updatedLikes = {
         ...likedPosts,
@@ -1294,10 +1195,90 @@ export default function Feed({
 
       setLikedPosts(updatedLikes);
 
-      await cachePosts(updatedPosts);
       await cacheLikes(updatedLikes);
 
-      // Keep the rest of your existing code unchanged...
+
+      // OFFLINE
+
+      if (!status.connected) {
+        const { value } =
+          await Preferences.get({
+            key: "pending_likes",
+          });
+
+        const pending = value
+          ? JSON.parse(value)
+          : [];
+
+        pending.push({
+          postId,
+          action: alreadyLiked
+            ? "unlike"
+            : "like",
+        });
+
+        await Preferences.set({
+          key: "pending_likes",
+          value: JSON.stringify(
+            pending
+          ),
+        });
+
+        return;
+      }
+
+      // ONLINE
+
+      const {
+        data: currentPost,
+        error: fetchError,
+      } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single();
+
+      if (fetchError) {
+        console.log(fetchError);
+        return;
+      }
+
+      const currentLikes =
+        currentPost?.likes_count || 0;
+
+      const newLikes = alreadyLiked
+        ? Math.max(
+          0,
+          currentLikes - 1
+        )
+        : currentLikes + 1;
+
+      const { error } =
+        await supabase
+          .from("posts")
+          .update({
+            likes_count: newLikes,
+          })
+          .eq("id", postId);
+
+      if (error) {
+        console.log(error);
+      }
+
+
+      const {
+        data: updatedPost,
+      } = await supabase
+        .from("posts")
+        .select("likes_count")
+        .eq("id", postId)
+        .single();
+
+
+      console.log(
+        "LATEST DB LIKE COUNT:",
+        updatedPost.likes_count
+      );
 
     } catch (err) {
       console.log(err);
@@ -1932,33 +1913,41 @@ export default function Feed({
 
                 <div className="grid grid-cols-3 gap-2 border-t border-gray-100 dark:border-white/5 pt-3">
                   {/* LIKE */}
+
                   <button
-                    onClick={() => likePost(post.id)}
-                    className={`flex items-center justify-center gap-2 h-12 rounded-2xl transition-all active:scale-95 ${likedPosts[String(post.id)]
-                        ? "bg-blue-500 text-white"
-                        : "bg-transparent text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5"
+                    onClick={() =>
+                      likePost(
+                        post.id
+                      )
+                    }
+                    className={`flex items-center justify-center gap-2 h-12 rounded-2xl transition-all active:scale-95 ${likedPosts[
+                      post.id
+                    ]
+                      ? "bg-blue-500/10 text-blue-500"
+                      : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200"
                       }`}
                   >
                     <ThumbsUp
                       size={20}
-                      className={`transition-all ${animatingLike === String(post.id)
-                          ? "scale-150 rotate-12"
-                          : ""
+                      className={`transition-all ${animatingLike ===
+                        post.id
+                        ? "scale-150 rotate-12"
+                        : ""
                         }`}
                       fill={
-                        likedPosts[String(post.id)]
+                        likedPosts[
+                          post.id
+                        ]
                           ? "currentColor"
                           : "none"
                       }
                     />
 
                     <span className="text-sm font-semibold">
-                      {likedPosts[String(post.id)]
-                        ? "Liked"
-                        : "Like"}
+                      Like
                     </span>
                   </button>
-                  
+
                   {/* MESSAGE */}
 
                   <button
@@ -2163,15 +2152,12 @@ export default function Feed({
                     onChange={(e) => setCommentText(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        addCommentToPost({
-                          postId: activePost?.id,
-                          commentText,
-                          me,
-                          setComments,
-                          setCommentText,
-                        });
+                        addCommentToPost();
                       }
+
                     }}
+
+
                     placeholder="Write a comment..."
                     className="flex-1 h-12 px-4 rounded-full border border-gray-200 bg-gray-50 text-sm outline-none focus:border-purple-400 focus:bg-white transition"
                   />
@@ -2179,7 +2165,7 @@ export default function Feed({
 
 
                   <button
-                    onClick={() => addCommentToPost(activePost)}
+                    onClick={() => addCommentToPost()}
                     className="
     h-12
     px-5
