@@ -256,30 +256,27 @@ export default function Feed({
 
 
 
-
   const addCommentToPost = async () => {
-
-    const profile = await getUserProfile(me.id);
     if (!commentText.trim() || !activePost) return;
 
 
+
+    const profile = await getUserProfile(me.id);
+
     console.log(profile.avatar_url);
 
-    /*  console.log(newComment) */
-
-    // 1. INSTANT UI UPDATE
-    const tempId = crypto.randomUUID();
-
     const newComment = {
-      id: tempId,
+      id: crypto.randomUUID(),
       user: me?.user_metadata.full_name || "Anonymous",
       user_id: me?.id,
-      avatar: profile?.avatar_url,
+      avatar: profile.avatar_url,
       text: commentText.trim(),
       created_at: new Date().toISOString(),
     };
 
-    // optimistic UI
+    /*  console.log(newComment) */
+
+    // 1. INSTANT UI UPDATE
     setComments((prev) => [newComment, ...prev]);
     setCommentText("");
 
@@ -786,18 +783,6 @@ export default function Feed({
           }));
 
 
-        const likesMap = {};
-
-        data.forEach((post) => {
-          if (post.user_liked) {
-            likesMap[post.id] = true;
-          }
-        });
-
-        setLikedPosts(likesMap);
-        await cacheLikes(likesMap);
-
-
 
         // CACHE IMAGES
 
@@ -1052,8 +1037,7 @@ export default function Feed({
             if (
               status.connected
             ) {
-              if (Capacitor.isNativePlatform()
-              ) {
+              if (Capacitor.isNativePlatform) {
                 await showToast(
                   "You're back online"
                 );
@@ -1120,7 +1104,7 @@ export default function Feed({
   // ================= LIKE POST =================
   const likePost = async (postId) => {
     try {
-      const alreadyLiked = !!likedPosts[postId];
+      const alreadyLiked = likedPosts[postId];
 
       setAnimatingLike(postId);
 
@@ -1146,14 +1130,8 @@ export default function Feed({
         return post;
       });
 
-      // CHECK NETWORK
-
-      const status =
-        await Network.getStatus();
-
-
       //APP NOTIFICATION
-      if (Capacitor.isNativePlatform()) {
+      if (Capacitor.isNativePlatform) {
 
         await showNotification(
           "Message",
@@ -1178,14 +1156,6 @@ export default function Feed({
 
       await cachePosts(updatedPosts);
 
-
-      if (status.connected) {
-        await sendNotification({
-          title: "❤️ Like",
-          body: "You liked a post",
-        });
-      }
-
       // SAVE LOCAL LIKE STATE
 
       const updatedLikes = {
@@ -1197,6 +1167,10 @@ export default function Feed({
 
       await cacheLikes(updatedLikes);
 
+      // CHECK NETWORK
+
+      const status =
+        await Network.getStatus();
 
       // OFFLINE
 
@@ -2152,12 +2126,15 @@ export default function Feed({
                     onChange={(e) => setCommentText(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        addCommentToPost();
+                        addCommentToPost({
+                          postId: activePost?.id,
+                          commentText,
+                          me,
+                          setComments,
+                          setCommentText,
+                        });
                       }
-
                     }}
-
-
                     placeholder="Write a comment..."
                     className="flex-1 h-12 px-4 rounded-full border border-gray-200 bg-gray-50 text-sm outline-none focus:border-purple-400 focus:bg-white transition"
                   />
@@ -2165,7 +2142,7 @@ export default function Feed({
 
 
                   <button
-                    onClick={() => addCommentToPost()}
+                    onClick={() => addCommentToPost(activePost)}
                     className="
     h-12
     px-5
