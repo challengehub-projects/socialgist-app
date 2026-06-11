@@ -92,6 +92,97 @@ export default function Feed({
 
 
 
+  const toggleFollow = async (profile) => {
+    if (!me?.id || !profile?.id) return;
+
+    try {
+      const isFollowing = followingIds.includes(profile.id);
+
+      // =========================
+      // UNFOLLOW
+      // =========================
+      if (isFollowing) {
+        setFollowingIds((prev) =>
+          prev.filter((id) => id !== profile.id)
+        );
+
+        const { error } = await supabase
+          .from("follows")
+          .delete()
+          .match({
+            follower_id: me.id,
+            following_id: profile.id,
+          });
+
+        if (error) throw error;
+
+        // update counts (DB)
+        await supabase.rpc("decrement_follow_counts", {
+          follower_id_input: me.id,
+          following_id_input: profile.id,
+        });
+
+        // OPTIONAL: update UI profile instantly
+        setProfileData((prev) => ({
+          ...prev,
+          followers_count: Math.max(
+            (prev?.followers_count || 0) - 1,
+            0
+          ),
+        }));
+
+        return;
+      }
+
+      // =========================
+      // FOLLOW
+      // =========================
+      setFollowingIds((prev) => [...prev, profile.id]);
+
+      const { error } = await supabase.from("follows").insert({
+        follower_id: me.id,
+        following_id: profile.id,
+      });
+
+      if (error?.code === "23505") {
+        console.log("Already following");
+        return;
+      }
+
+      if (error) throw error;
+
+      // update counts (DB)
+      await supabase.rpc("increment_follow_counts", {
+        follower_id_input: me.id,
+        following_id_input: profile.id,
+      });
+
+      // OPTIONAL: update UI instantly
+      setProfileData((prev) => ({
+        ...prev,
+        followers_count: (prev?.followers_count || 0) + 1,
+      }));
+    } catch (err) {
+      console.error("Follow toggle error:", err.message);
+    }
+  };
+
+  const formatTimeAgo = (dateString) => {
+    if (!dateString) return "";
+
+    const date = new Date(dateString);
+    const now = new Date();
+
+    const diff = Math.floor((now - date) / 1000); // seconds
+
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+    if (diff < 172800) return "yesterday";
+
+    return date.toLocaleDateString();
+  };
+
   const openComments = async (post) => {
     setOpen(true);
     setLoadingcomment(true);
@@ -161,8 +252,10 @@ export default function Feed({
 
       console.log(data)
 
-      setProfileData(data);
-
+      setProfileData({
+        ...data,
+        viewer_id: me?.id
+      });
 
       if (error) throw error;
 
@@ -1002,6 +1095,56 @@ export default function Feed({
       supabase.removeChannel(channel);
     };
   }, [me?.id]);
+
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("follow-realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "profiles",
+        },
+        (payload) => {
+          console.log("👥 PROFILE UPDATE:", payload);
+
+          const updatedProfile = payload.new;
+
+          setProfileData((prev) =>
+            prev?.id === updatedProfile?.id
+              ? {
+                ...prev,
+                post: payload.new.post,
+                followers_count: updatedProfile.followers_count,
+                following_count: updatedProfile.following_count,
+              }
+              : prev
+          );
+
+          // OPTIONAL: if you show profiles in feed posts
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.user_id === updatedProfile.id
+                ? {
+                  ...post,
+                  followers_count: updatedProfile.followers_count,
+                  following_count: updatedProfile.following_count,
+                }
+                : post
+            )
+          );
+        }
+      )
+      .subscribe((status) => {
+        console.log("📡 Follow Status:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   // ================= NETWORK =================
 
   useEffect(() => {
@@ -1728,10 +1871,7 @@ export default function Feed({
 
                   <p className="text-xs text-gray-500">
                     {post.created_at
-                      ? new Date(post.created_at).toLocaleString("en-NG", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })
+                      ? formatTimeAgo(post.created_at)
                       : "Just now"}
                   </p>
                 </div>
@@ -2102,7 +2242,7 @@ export default function Feed({
                           </span>
 
                           <span className="text-xs text-gray-400">
-                            now
+                            {formatTimeAgo(c.created_at)}
                           </span>
                         </div>
 
@@ -2176,10 +2316,8 @@ export default function Feed({
           open={profileOpen}
           onClose={() => setProfileOpen(false)}
           profile={profileData}
-          isFollowing={false}
-          onFollowToggle={(profile) => {
-            console.log("Follow:", profile);
-          }}
+          isFollowing={profileData ? followingIds.includes(profileData.id) : false}
+          onFollowToggle={toggleFollow}
         />
 
       </div>

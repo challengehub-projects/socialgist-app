@@ -26,6 +26,8 @@ export default function ProfileModal({
   const [zoom, setZoom] = useState(1);
 
 
+
+
   // ESC CLOSE
   useEffect(() => {
     const handleKey = (e) => {
@@ -127,8 +129,8 @@ export default function ProfileModal({
                     src={profile.avatar_url}
                     alt={profile.full_name}
                     onClick={() => {
-                       setZoom(1);
-                       setImageOpen(true)
+                      setZoom(1);
+                      setImageOpen(true)
                     }}
                     className="w-32 h-32 rounded-full object-cover border-4 border-purple-100 shadow-xl cursor-pointer"
                   />
@@ -168,7 +170,7 @@ export default function ProfileModal({
 
                 <div className="bg-purple-50 rounded-3xl p-4 text-center">
                   <div className="font-bold text-2xl text-purple-700">
-                    {profile?.followers || 0}
+                    {profile?.followers_count || 0}
                   </div>
                   <div className="text-sm text-gray-500">
                     Followers
@@ -177,7 +179,7 @@ export default function ProfileModal({
 
                 <div className="bg-purple-50 rounded-3xl p-4 text-center">
                   <div className="font-bold text-2xl text-purple-700">
-                    {profile?.following || 0}
+                    {profile?.following_count || 0}
                   </div>
                   <div className="text-sm text-gray-500">
                     Following
@@ -189,26 +191,37 @@ export default function ProfileModal({
               {/* BUTTONS */}
               <div className="flex gap-3 mt-8">
 
-                <button
-                  onClick={() => onFollowToggle?.(profile)}
-                  className="flex-1 h-14 rounded-2xl bg-purple-600 text-white font-semibold shadow-lg active:scale-95 transition"
-                >
-                  {isFollowing ? "Following" : "Follow"}
-                </button>
+                {/* 👇 ONLY SHOW VIEW PROFILE IF IT'S YOUR OWN PROFILE */}
+                {profile?.id === profile?.viewer_id ? (
+                  <button
+                    onClick={() => onNavigate?.("profile")}
+                    className="flex-1 h-14 rounded-2xl bg-purple-600 text-white font-semibold shadow-lg active:scale-95 transition"
+                  >
+                    View Profile
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => onFollowToggle?.(profile)}
+                      className="flex-1 h-14 rounded-2xl bg-purple-600 text-white font-semibold shadow-lg active:scale-95 transition"
+                    >
+                      {isFollowing ? "Following" : "Follow"}
+                    </button>
 
-                <button
-                  onClick={() =>
-                    onNavigate?.("profile", profile)
-                  }
-                  className="flex-1 h-14 rounded-2xl border-2 border-purple-200 text-purple-700 font-semibold active:scale-95 transition"
-                >
-                  View Profile
-                </button>
-
+                    <button
+                      onClick={() => {
+                        onNavigate?.("profile");
+                      }}
+                      className="flex-1 h-14 rounded-2xl border-2 border-purple-200 text-purple-700 font-semibold active:scale-95 transition"
+                    >
+                      View Profile
+                    </button>
+                  </>
+                )}
               </div>
 
               {imageOpen && (
-                <div className="fixed inset-0 z-[999999] bg-black flex items-center justify-center overflow-hidden">
+                <div className="fixed inset-0 z-[999999] bg-black flex items-center justify-center">
 
                   {/* BACKDROP CLOSE */}
                   <div
@@ -216,22 +229,41 @@ export default function ProfileModal({
                     onClick={() => setImageOpen(false)}
                   />
 
-                  {/* ZOOMABLE IMAGE */}
-                  <img
-                    src={profile?.avatar_url}
-                    alt="full"
-                    onClick={() => setZoom((z) => Math.min(z + 0.3, 3))}
-                    style={{
-                      transform: `scale(${zoom})`,
-                      transition: "transform 0.25s ease",
-                    }}
-                    className="w-full h-full object-cover cursor-zoom-in select-none"
-                  />
+                  {/* IMAGE CONTAINER */}
+                  <div className="relative z-10 flex items-center justify-center w-full h-full p-4">
+
+                    <img
+                      src={profile?.avatar_url}
+                      alt="profile"
+                      onClick={() => setZoom((z) => Math.min(z + 0.3, 3))}
+                      style={{
+                        transform: `scale(${zoom})`,
+                        transition: "transform 0.25s ease",
+                      }}
+                      className="
+          max-w-full
+          max-h-full
+          object-contain
+          rounded-xl
+          shadow-2xl
+          cursor-zoom-in
+          select-none
+        "
+                    />
+
+                  </div>
 
                   {/* CLOSE BUTTON */}
                   <button
                     onClick={() => setImageOpen(false)}
-                    className="absolute top-5 right-5 bg-white text-black w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-lg"
+                    className="
+        absolute top-5 right-5
+        bg-white text-black
+        w-10 h-10
+        rounded-full
+        flex items-center justify-center
+        font-bold shadow-lg z-20
+      "
                   >
                     ✕
                   </button>

@@ -1,30 +1,16 @@
 // ================= APP.JSX =================
 
-import React, {
-  useEffect,
-  useState,
-  lazy
-} from "react";
+import React, { useEffect, useState } from "react";
 
-import {
-  registerPush,
-} from "./utils/registerPush";
-
-import {
-  initNotifications,
-  showNotification,
-} from "./utils/notifications";
-
+import { registerPush } from "./utils/registerPush";
+import { initNotifications } from "./utils/notifications";
 import { initChatDB } from "./utils/chatStorage";
-
-
-/* import listenNotifications from "./utils/sendNotifications"; */
-
 
 import { supabase } from "./configs/supbase";
 
 import { Network } from "@capacitor/network";
 import { Toast } from "@capacitor/toast";
+import { Capacitor } from "@capacitor/core";
 
 import WelcomePage from "./pages/welcome";
 import LoginPage from "./pages/login";
@@ -36,247 +22,114 @@ import TopNavbar from "./pages/navbar";
 import Messages from "./pages/messages";
 import ProfilePage from "./pages/profile";
 import ProfileModal from "./pages/profileModal";
-import { Capacitor } from "@capacitor/core";
-import { getLocalMessages } from "./utils/chatSync";
-
-import { BrowserRouter, Routes, Route, Router } from "react-router-dom";
-
+import NotificationsPage from "./pages/notifications";
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showSplash, setShowSplash] = useState(true);
 
-  const [session, setSession] =
-    useState(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [showSplash, setShowSplash] =
-    useState(true);
-
-  // ================= ROUTING =================
-
-  const [page, setPage] =
-    useState("welcome");
-
-  // COMMENT CHAT DATA
-  const [selectedPost, setSelectedPost] =
-    useState(null);
-
-
-  console.log(
-    "Platform:",
-    Capacitor.getPlatform()
-  );
-
-  console.log(
-    "Native:",
-    Capacitor.isNativePlatform()
-  );
-
-  if (
-    Capacitor.isNativePlatform()
-  ) {
-    console.log(
-      "Running inside Android/iOS app"
-    );
-  } else {
-    console.log(
-      "Running in browser"
-    );
-  }
-
-  // ================= SPLASH =================
+  const [page, setPage] = useState("welcome");
+  const [selectedPost, setSelectedPost] = useState(null);
 
   useEffect(() => {
-
-    const timer = setTimeout(() => {
-
-      setShowSplash(false);
-
-    }, 2500);
-
+    const timer = setTimeout(() => setShowSplash(false), 2500);
     return () => clearTimeout(timer);
-
-  }, []);
-
-
-  useEffect(() => {
-    const setup = async () => {
-      if (
-        Capacitor.isNativePlatform()
-      ) {
-        await StatusBar.setOverlaysWebView({
-          overlay: true,
-        });
-      }
-    };
-
-    setup();
-  }, []);
-
-  useEffect(() => {
-
-    Notification.requestPermission();
-
-  }, []);
-
-  useEffect(() => {
-    const start = async () => {
-      await initChatDB();
-    };
-
-    if (Capacitor.isNativePlatform) {
-      start();
-    }
-  }, []);
-
-  useEffect(async () => {
-    await initNotifications();
   }, []);
 
   // ================= AUTH =================
 
   useEffect(() => {
-
     checkSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
 
-        setSession(session);
-
-        if (session) {
-          setPage("feed");
-        }
+      if (session) {
+        setPage("feed");
       }
-    );
+    });
 
-    return () =>
-      subscription.unsubscribe();
-
+    return () => subscription.unsubscribe();
   }, []);
 
-  // ================= CHECK SESSION =================
-
   const checkSession = async () => {
-
     const {
       data: { session },
-    } =
-      await supabase.auth.getSession();
-
-    console.log(session)
+    } = await supabase.auth.getSession();
 
     setSession(session);
 
     if (session) {
       setPage("feed");
-
-
-      registerPush(
-        session.user.id
-      );
-      /* listenNotifications(); */
+      registerPush(session.user.id);
     }
 
     setLoading(false);
   };
 
+  // ================= INIT =================
+
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      initChatDB();
+    }
+
+    initNotifications();
+    Notification.requestPermission();
+  }, []);
+
   // ================= NETWORK =================
 
   useEffect(() => {
-
     let firstRun = true;
 
-    const setupNetwork =
-      async () => {
+    const setupNetwork = async () => {
+      Network.addListener("networkStatusChange", async (status) => {
+        if (firstRun) {
+          firstRun = false;
+          return;
+        }
 
-        const status =
-          await Network.getStatus();
-
-        console.log(
-          status.connected
-        );
-
-        Network.addListener(
-          "networkStatusChange",
-
-          async (status) => {
-
-            if (firstRun) {
-              firstRun = false;
-              return;
-            }
-
-            if (
-              status.connected
-            ) {
-
-              await Toast.show({
-                text:
-                  "You're back online",
-
-                duration:
-                  "short",
-
-                position:
-                  "bottom",
-              });
-
-            } else {
-
-              await Toast.show({
-                text:
-                  "You're offline",
-
-                duration:
-                  "short",
-
-                position:
-                  "bottom",
-              });
-
-            }
-          }
-        );
-      };
+        await Toast.show({
+          text: status.connected
+            ? "You're back online"
+            : "You're offline",
+          duration: "short",
+          position: "bottom",
+        });
+      });
+    };
 
     setupNetwork();
-
   }, []);
 
-  // ================= OPEN MESSAGES =================
+  // ================= NAV =================
 
   const openMessages = (post) => {
-
     setSelectedPost(post);
-
     setPage("messages");
   };
+
+  const openNotif = (post) => {
+    setSelectedPost(post);
+    setPage("notifications");
+  };
+
 
   // ================= SPLASH =================
 
   if (showSplash) {
-
     return (
       <div className="h-screen bg-white flex items-center justify-center">
-
         <div className="flex flex-col items-center">
-
-          <img
-            src="/icon.png"
-            alt="logo"
-            className="w-24 h-24 animate-pulse"
-          />
-
+          <img src="/icon.png" className="w-24 h-24 animate-pulse" />
           <h1 className="mt-4 text-2xl font-black text-purple-700">
             SocialGist
           </h1>
-
         </div>
-
       </div>
     );
   }
@@ -284,123 +137,40 @@ export default function App() {
   // ================= LOADING =================
 
   if (loading) {
-
     return (
-      /*  <div className="h-screen bg-white flex items-center justify-center">
-         <div className="flex items-center justify-center py-10">
-           <div className="w-12 h-12 border-[5px] border-purple-200 border-t-fuchsia-600 rounded-full animate-spin"></div>
-         </div>
- 
-       </div> */
       <div className="h-screen bg-white flex items-center justify-center">
-
         <div className="flex flex-col items-center">
-
-          <img
-            src="/icon.png"
-            alt="logo"
-            className="w-24 h-24 animate-pulse"
-          />
-
+          <img src="/icon.png" className="w-24 h-24 animate-pulse" />
           <h1 className="mt-4 text-2xl font-black text-purple-700">
             SocialGist
           </h1>
-
         </div>
-
       </div>
     );
   }
 
-  // ================= ROUTING =================
+  // ================= ROUTES =================
 
-  if (page === "welcome") {
+  if (page === "welcome") return <WelcomePage onNavigate={setPage} />;
+  if (page === "login") return <LoginPage onNavigate={setPage} />;
+  if (page === "signup") return <SignupPage onNavigate={setPage} />;
+  if (page === "messages")
+    return <Messages post={selectedPost} onBack={() => setPage("feed")} />;
+  if (page === "profile") return <ProfilePage onNavigate={setPage} />;
+  if (page === "profileModal") return <ProfileModal onNavigate={setPage} />;
+  if (page === "notifications")
+    return <NotificationsPage post={selectedPost} onBack={() => setPage("feed")} />;
 
-    return (
-      <WelcomePage
-        onNavigate={setPage}
-      />
-    );
-  }
-
-  if (page === "login") {
-
-    return (
-      <LoginPage
-        onNavigate={setPage}
-      />
-    );
-  }
-
-  if (page === "signup") {
-
-    return (
-      <SignupPage
-        onNavigate={setPage}
-      />
-    );
-  }
-
-  // ================= MESSAGES =================
-
-  if (page === "messages") {
-
-    return (
-      <Messages
-        post={selectedPost}
-        onBack={() =>
-          setPage("feed")
-        }
-      />
-    );
-  }
-
-
-
-
-  // ============ profile =============
-
-  if (page === "profile") {
-
-    return (
-      <ProfilePage
-
-        onNavigate={setPage}
-
-      />
-    );
-  }
-
-
-  if (page === "profileModal") {
-
-    return (
-      <ProfileModal
-        onNavigate={setPage}
-      />
-    );
-  }
-
-  // ================= FEED =================
+  // ================= FEED FIX (IMPORTANT) =================
 
   return (
     <>
+      <TopNavbar onOpenMessages={openMessages} onOpenNotif={openNotif} onNavigate={setPage} />
 
-      <TopNavbar
-        onOpenMessages={openMessages}
-        onNavigate={setPage}
-      />
-
-      <HomeFeedPage
-
-        onOpenMessages={
-          openMessages
-        }
-
-      />
-
-
+      {/* FEED IS ALWAYS MOUNTED (NO RELOAD ANYMORE) */}
+      <div className={page === "feed" ? "block" : "hidden"}>
+        <HomeFeedPage onOpenMessages={openMessages}  />
+      </div>
     </>
   );
-
 }

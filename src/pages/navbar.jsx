@@ -59,6 +59,7 @@ export default function TopNavbar({
   onNavigate,
   onPostCreated,
   onOpenMessages,
+  onOpenNotif
 }) {
 
   const [showProfileMenu,
@@ -168,6 +169,7 @@ export default function TopNavbar({
       )
       ]
     );
+
 
   useEffect(() => {
 
@@ -604,6 +606,36 @@ export default function TopNavbar({
     });
   };
 
+   const incrementPostCount = async ( userId) => {
+    if (!userId) return;
+
+    // 1. get current count
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("posts_count")
+      .eq("id", userId)
+      .single();
+
+    if (error) {
+      console.error("Fetch error:", error.message);
+      return;
+    }
+
+    const current = data?.posts || 0;
+
+    // 2. update with new value
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({
+        posts_count: current + 1,
+      })
+      .eq("id", userId);
+
+    if (updateError) {
+      console.error("Update error:", updateError.message);
+    }
+  };
+
   // ================= CREATE POST =================
 
   const createPost = async () => {
@@ -797,6 +829,9 @@ export default function TopNavbar({
       }
 
 
+      // ================= UPDATE USER POSTS COUNT =================
+      await incrementPostCount(userData.user.id);
+
       await Toast.show({
         text:
           "Post Creates Successfully",
@@ -919,14 +954,15 @@ export default function TopNavbar({
             }}
           >
 
-  <img
-  src={
-    avatar ||
-    "https://ui-avatars.com/api/?name=User"
-  }
-  alt=""
-  className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500 active:scale-95 transition"
-/>
+            <img
+              src={
+                avatar
+                ||
+                "https://www.gravatar.com/avatar/?d=mp&s=200"
+              }
+              alt=""
+              className="h-11 w-11 rounded-full object-cover ring-2 ring-purple-500 active:scale-95 transition"
+            />
 
             <span className="absolute bottom-0 right-0 h-3.5 w-3.5 bg-green-500 border-2 border-white rounded-full animate-pulse" />
 
@@ -1059,7 +1095,9 @@ export default function TopNavbar({
 
             {/* NOTIF */}
 
-            <button className={iconBtn}>
+            <button className={iconBtn}
+              onClick={() => onOpenNotif(post)}
+            >
 
               <Bell size={18} />
 
