@@ -1102,7 +1102,167 @@ export default function Feed({
 
 
   // ================= LIKE POST =================
+  /*   const likePost = async (postId) => {
+  
+      try {
+        const alreadyLiked = likedPosts[postId];
+  
+        setAnimatingLike(postId);
+  
+        setTimeout(() => {
+          setAnimatingLike(null);
+        }, 400);
+  
+        // UPDATE UI IMMEDIATELY
+  
+        const updatedPosts = posts.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              likes_count: alreadyLiked
+                ? Math.max(
+                  0,
+                  (post.likes_count || 0) - 1
+                )
+                : (post.likes_count || 0) + 1,
+            };
+          }
+  
+          return post;
+        });
+  
+        //APP NOTIFICATION
+        if (Capacitor.isNativePlatform) {
+  
+          await showNotification(
+            "Message",
+            "You liked a post!"
+          );
+  
+        }
+  
+        // BROWSER NOTIFICATION
+  
+        await sendNotification({
+  
+          title:
+            "Message",
+  
+          body:
+            "You Liked a post!",
+  
+        });
+  
+        setPosts(updatedPosts);
+  
+        await cachePosts(updatedPosts);
+  
+        // SAVE LOCAL LIKE STATE
+  
+        const updatedLikes = {
+          ...likedPosts,
+          [postId]: !alreadyLiked,
+        };
+  
+        setLikedPosts(updatedLikes);
+  
+        await cacheLikes(updatedLikes);
+  
+        // CHECK NETWORK
+  
+        const status =
+          await Network.getStatus();
+  
+        // OFFLINE
+  
+        if (!status.connected) {
+          const { value } =
+            await Preferences.get({
+              key: "pending_likes",
+            });
+  
+          const pending = value
+            ? JSON.parse(value)
+            : [];
+  
+          pending.push({
+            postId,
+            action: alreadyLiked
+              ? "unlike"
+              : "like",
+          });
+  
+          await Preferences.set({
+            key: "pending_likes",
+            value: JSON.stringify(
+              pending
+            ),
+          });
+  
+          return;
+        }
+  
+        // ONLINE
+  
+        const {
+          data: currentPost,
+          error: fetchError,
+        } = await supabase
+          .from("posts")
+          .select("likes_count")
+          .eq("id", postId)
+          .single();
+  
+        if (fetchError) {
+          console.log(fetchError);
+          return;
+        }
+  
+        const currentLikes =
+          currentPost?.likes_count || 0;
+  
+        const newLikes = alreadyLiked
+          ? Math.max(
+            0,
+            currentLikes - 1
+          )
+          : currentLikes + 1;
+  
+        const { error } =
+          await supabase
+            .from("posts")
+            .update({
+              likes_count: newLikes,
+            })
+            .eq("id", postId);
+  
+        if (error) {
+          console.log(error);
+        }
+  
+  
+        const {
+          data: updatedPost,
+        } = await supabase
+          .from("posts")
+          .select("likes_count")
+          .eq("id", postId)
+          .single();
+  
+  
+        console.log(
+          "LATEST DB LIKE COUNT:",
+          updatedPost.likes_count
+        );
+  
+      } catch (err) {
+        console.log(err);
+      }
+    }; */
+
   const likePost = async (postId) => {
+    postId = String(postId);
+
     try {
       const alreadyLiked = likedPosts[postId];
 
@@ -1112,17 +1272,12 @@ export default function Feed({
         setAnimatingLike(null);
       }, 400);
 
-      // UPDATE UI IMMEDIATELY
-
       const updatedPosts = posts.map((post) => {
-        if (post.id === postId) {
+        if (String(post.id) === postId) {
           return {
             ...post,
             likes_count: alreadyLiked
-              ? Math.max(
-                0,
-                (post.likes_count || 0) - 1
-              )
+              ? Math.max(0, (post.likes_count || 0) - 1)
               : (post.likes_count || 0) + 1,
           };
         }
@@ -1130,33 +1285,7 @@ export default function Feed({
         return post;
       });
 
-      //APP NOTIFICATION
-      if (Capacitor.isNativePlatform) {
-
-        await showNotification(
-          "Message",
-          "You liked a post!"
-        );
-
-      }
-
-      // BROWSER NOTIFICATION
-
-      await sendNotification({
-
-        title:
-          "Message",
-
-        body:
-          "You Liked a post!",
-
-      });
-
       setPosts(updatedPosts);
-
-      await cachePosts(updatedPosts);
-
-      // SAVE LOCAL LIKE STATE
 
       const updatedLikes = {
         ...likedPosts,
@@ -1165,94 +1294,10 @@ export default function Feed({
 
       setLikedPosts(updatedLikes);
 
+      await cachePosts(updatedPosts);
       await cacheLikes(updatedLikes);
 
-      // CHECK NETWORK
-
-      const status =
-        await Network.getStatus();
-
-      // OFFLINE
-
-      if (!status.connected) {
-        const { value } =
-          await Preferences.get({
-            key: "pending_likes",
-          });
-
-        const pending = value
-          ? JSON.parse(value)
-          : [];
-
-        pending.push({
-          postId,
-          action: alreadyLiked
-            ? "unlike"
-            : "like",
-        });
-
-        await Preferences.set({
-          key: "pending_likes",
-          value: JSON.stringify(
-            pending
-          ),
-        });
-
-        return;
-      }
-
-      // ONLINE
-
-      const {
-        data: currentPost,
-        error: fetchError,
-      } = await supabase
-        .from("posts")
-        .select("likes_count")
-        .eq("id", postId)
-        .single();
-
-      if (fetchError) {
-        console.log(fetchError);
-        return;
-      }
-
-      const currentLikes =
-        currentPost?.likes_count || 0;
-
-      const newLikes = alreadyLiked
-        ? Math.max(
-          0,
-          currentLikes - 1
-        )
-        : currentLikes + 1;
-
-      const { error } =
-        await supabase
-          .from("posts")
-          .update({
-            likes_count: newLikes,
-          })
-          .eq("id", postId);
-
-      if (error) {
-        console.log(error);
-      }
-
-
-      const {
-        data: updatedPost,
-      } = await supabase
-        .from("posts")
-        .select("likes_count")
-        .eq("id", postId)
-        .single();
-
-
-      console.log(
-        "LATEST DB LIKE COUNT:",
-        updatedPost.likes_count
-      );
+      // Keep the rest of your existing code unchanged...
 
     } catch (err) {
       console.log(err);
@@ -1495,9 +1540,8 @@ export default function Feed({
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0f0f10] pb-24">
       {/* TOP */}
-
       <div className="px-3 pt-3 overflow-x-auto scrollbar-hide">
-        <div className="flex gap-2 w-max">
+        <div className="flex gap-3 w-max">
 
           {[
             "all",
@@ -1512,11 +1556,22 @@ export default function Feed({
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-all active:scale-95
+              className={`
+          px-4
+          py-1
+          rounded-lg
+          text-sm
+          font-semibold
+          whitespace-nowrap
+          transition-all
+          active:scale-95
+          shadow-sm
+
           ${activeTab === tab
-                  ? "bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white shadow-md"
-                  : "bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10"
-                }`}
+                  ? "bg-purple-600 text-white border-purple-600 shadow-md"
+                  : "bg-white text-gray-700 border-gray-200 hover:border-purple-300 hover:bg-purple-50"
+                }
+        `}
             >
               {tab}
             </button>
@@ -1877,41 +1932,33 @@ export default function Feed({
 
                 <div className="grid grid-cols-3 gap-2 border-t border-gray-100 dark:border-white/5 pt-3">
                   {/* LIKE */}
-
                   <button
-                    onClick={() =>
-                      likePost(
-                        post.id
-                      )
-                    }
-                    className={`flex items-center justify-center gap-2 h-12 rounded-2xl transition-all active:scale-95 ${likedPosts[
-                      post.id
-                    ]
-                      ? "bg-blue-500/10 text-blue-500"
-                      : "hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-200"
+                    onClick={() => likePost(post.id)}
+                    className={`flex items-center justify-center gap-2 h-12 rounded-2xl transition-all active:scale-95 ${likedPosts[String(post.id)]
+                        ? "bg-blue-500 text-white"
+                        : "bg-transparent text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/5"
                       }`}
                   >
                     <ThumbsUp
                       size={20}
-                      className={`transition-all ${animatingLike ===
-                        post.id
-                        ? "scale-150 rotate-12"
-                        : ""
+                      className={`transition-all ${animatingLike === String(post.id)
+                          ? "scale-150 rotate-12"
+                          : ""
                         }`}
                       fill={
-                        likedPosts[
-                          post.id
-                        ]
+                        likedPosts[String(post.id)]
                           ? "currentColor"
                           : "none"
                       }
                     />
 
                     <span className="text-sm font-semibold">
-                      Like
+                      {likedPosts[String(post.id)]
+                        ? "Liked"
+                        : "Like"}
                     </span>
                   </button>
-
+                  
                   {/* MESSAGE */}
 
                   <button
@@ -2169,9 +2216,6 @@ export default function Feed({
           isFollowing={false}
           onFollowToggle={(profile) => {
             console.log("Follow:", profile);
-          }}
-          onNavigate={(type, profile) => {
-            console.log(type, profile);
           }}
         />
 
